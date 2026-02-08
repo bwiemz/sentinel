@@ -1,0 +1,84 @@
+sentinel:
+  system:
+    name: "SENTINEL"
+    version: "0.1.0"
+    log_level: "INFO"
+
+  sensors:
+    camera:
+      enabled: true
+      source: 0                    # 0=USB, "rtsp://..." or "/path/to/video.mp4"
+      width: 1280
+      height: 720
+      fps: 30
+      buffer_size: 1
+      backend: "auto"              # "auto", "dshow", "v4l2", "ffmpeg"
+
+    radar:
+      enabled: false               # Disabled until Phase 4
+      mode: "simulator"
+      scan_rate_hz: 10
+      max_range_m: 10000
+      fov_deg: 120
+      noise:
+        range_m: 5.0
+        azimuth_deg: 1.0
+        velocity_mps: 0.5
+        rcs_dbsm: 2.0
+        false_alarm_rate: 0.01
+        detection_probability: 0.9
+
+  detection:
+    model: "yolov8n.pt"
+    confidence: 0.25
+    iou_threshold: 0.45
+    device: "auto"                 # "auto", "cpu", "cuda:0", "mps"
+    classes: null                   # null = all classes
+    max_detections: 100
+    image_size: 640
+
+  tracking:
+    filter:
+      type: "kf"                   # "kf", "ekf", "ukf"
+      dt: 0.033                    # 1/30 FPS
+      process_noise_std: 1.0
+      measurement_noise_std: 10.0
+      backend: "auto"              # "auto", "cpp", "python"
+
+    association:
+      method: "hungarian"
+      gate_threshold: 9.21         # chi2(2df) at 99%
+      iou_weight: 0.5
+      mahalanobis_weight: 0.5
+
+    track_management:
+      confirm_hits: 3
+      confirm_window: 5
+      max_coast_frames: 15
+      max_tracks: 100
+
+  ui:
+    hud:
+      enabled: true
+      display: true
+      overlay_alpha: 0.85
+      colors:
+        tentative: [0, 255, 255]     # Yellow (BGR)
+        confirmed: [0, 255, 0]       # Green
+        coasting: [0, 165, 255]      # Orange
+        reticle: [0, 255, 0]         # Green
+        text: [0, 255, 0]            # Green
+        border: [0, 180, 0]          # Dark green
+        danger: [0, 0, 255]          # Red
+        background: [0, 20, 0]       # Dark green tint
+      scanline:
+        enabled: true
+        spacing: 3
+        alpha: 0.03
+
+    web:
+      enabled: false               # Disabled until Phase 6
+      host: "0.0.0.0"
+      port: 8080
+      track_update_hz: 10
+      video_stream_fps: 15

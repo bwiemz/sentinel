@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.o
+*.obj
+*.lib
+*.dll
+*.exp
+_skbuild/
+cmake-build-*/
+
+# Data / models (download separately)
+*.pt
+*.onnx
+data/models/
+data/test_videos/*.mp4
+data/test_videos/*.avi
+
+# Config overrides
+config/local.yaml
+
+# Web build
+web/node_modules/
+web/dist/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Profiling
+*.prof
+*.pstats

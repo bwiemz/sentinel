@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentinel"
+version = "0.1.0"
+description = "SENTINEL - Sensor-Enhanced Networked Tracking, Intelligence, and Engagement Library"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "SENTINEL Project"},
+]
+dependencies = [
+    "numpy>=1.24",
+    "opencv-python>=4.8",
+    "ultralytics>=8.0",
+    "omegaconf>=2.3",
+    "pyyaml>=6.0",
+    "structlog>=23.0",
+    "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.100",
+    "uvicorn>=0.23",
+    "websockets>=11.0",
+    "pydantic>=2.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-benchmark",
+    "pytest-asyncio",
+    "httpx",
+]
+all = ["sentinel[web,dev]"]
+
+[project.scripts]
+sentinel = "sentinel.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
