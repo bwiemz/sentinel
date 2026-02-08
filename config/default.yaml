@@ -15,7 +15,7 @@ sentinel:
       backend: "auto"              # "auto", "dshow", "v4l2", "ffmpeg"
 
     radar:
-      enabled: false               # Disabled until Phase 4
+      enabled: true
       mode: "simulator"
       scan_rate_hz: 10
       max_range_m: 10000
@@ -27,6 +27,18 @@ sentinel:
         rcs_dbsm: 2.0
         false_alarm_rate: 0.01
         detection_probability: 0.9
+      scenario:
+        targets:
+          - id: "TGT-01"
+            position: [3000, 1000]
+            velocity: [-20, 5]
+            rcs_dbsm: 15
+            class_name: "vehicle"
+          - id: "TGT-02"
+            position: [5000, -2000]
+            velocity: [10, 15]
+            rcs_dbsm: 10
+            class_name: "vehicle"
 
   detection:
     model: "yolov8n.pt"
@@ -57,6 +69,28 @@ sentinel:
       max_coast_frames: 15
       max_tracks: 100
 
+    radar:
+      filter:
+        type: "ekf"
+        dt: 0.1                      # 1/10 Hz radar
+        process_noise_std: 1.0       # m/s^2
+        measurement_noise:
+          range_m: 5.0
+          azimuth_deg: 1.0
+      association:
+        method: "hungarian"
+        gate_threshold: 9.21
+      track_management:
+        confirm_hits: 3
+        max_coast_frames: 5
+        max_tracks: 50
+
+  fusion:
+    enabled: true
+    camera_hfov_deg: 60.0
+    azimuth_gate_deg: 5.0
+    min_fusion_quality: 0.3
+
   ui:
     hud:
       enabled: true
@@ -71,6 +105,8 @@ sentinel:
         border: [0, 180, 0]          # Dark green
         danger: [0, 0, 255]          # Red
         background: [0, 20, 0]       # Dark green tint
+        radar: [255, 200, 0]         # Cyan for radar tracks (BGR)
+        fused: [255, 255, 0]         # Bright cyan for fused (BGR)
       scanline:
         enabled: true
         spacing: 3

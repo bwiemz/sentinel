@@ -1,0 +1,233 @@
+"""Radar simulator sensor adapter.
+
+Generates synthetic radar detections from configurable scenario targets
+with realistic noise, false alarms, and missed detections.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from typing import Optional
+
+import numpy as np
+
+from sentinel.core.clock import SystemClock
+from sentinel.core.types import Detection, SensorType
+from sentinel.sensors.base import AbstractSensor
+from sentinel.sensors.frame import SensorFrame
+from sentinel.utils.coords import (
+    azimuth_deg_to_rad,
+    azimuth_rad_to_deg,
+    cartesian_to_polar,
+    polar_to_cartesian,
+)
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RadarTarget:
+    """A simulated radar target with constant-velocity trajectory.
+
+    Attributes:
+        target_id: Unique identifier.
+        position: [x, y] in meters at t=0.
+        velocity: [vx, vy] in m/s.
+        rcs_dbsm: Radar cross section in dBsm.
+        class_name: Optional label for the target type.
+    """
+
+    target_id: str
+    position: np.ndarray
+    velocity: np.ndarray
+    rcs_dbsm: float = 10.0
+    class_name: str = "unknown"
+
+    def position_at(self, t: float) -> np.ndarray:
+        """Ground-truth position at time t seconds from start."""
+        return self.position + self.velocity * t
+
+
+@dataclass
+class RadarSimConfig:
+    """Configuration for the radar simulator."""
+
+    scan_rate_hz: float = 10.0
+    max_range_m: float = 10000.0
+    fov_deg: float = 120.0
+    noise_range_m: float = 5.0
+    noise_azimuth_deg: float = 1.0
+    noise_velocity_mps: float = 0.5
+    noise_rcs_dbsm: float = 2.0
+    false_alarm_rate: float = 0.01
+    detection_probability: float = 0.9
+    targets: list[RadarTarget] = field(default_factory=list)
+
+    @classmethod
+    def from_omegaconf(cls, cfg) -> RadarSimConfig:
+        """Create from OmegaConf DictConfig (sentinel.sensors.radar section)."""
+        noise = cfg.get("noise", {})
+        targets = []
+        scenario = cfg.get("scenario", {})
+        for t in scenario.get("targets", []):
+            targets.append(RadarTarget(
+                target_id=t.get("id", "TGT"),
+                position=np.array(t.get("position", [0, 0]), dtype=float),
+                velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
+                rcs_dbsm=t.get("rcs_dbsm", 10.0),
+                class_name=t.get("class_name", "unknown"),
+            ))
+        return cls(
+            scan_rate_hz=cfg.get("scan_rate_hz", 10.0),
+            max_range_m=cfg.get("max_range_m", 10000.0),
+            fov_deg=cfg.get("fov_deg", 120.0),
+            noise_range_m=noise.get("range_m", 5.0),
+            noise_azimuth_deg=noise.get("azimuth_deg", 1.0),
+            noise_velocity_mps=noise.get("velocity_mps", 0.5),
+            noise_rcs_dbsm=noise.get("rcs_dbsm", 2.0),
+            false_alarm_rate=noise.get("false_alarm_rate", 0.01),
+            detection_probability=noise.get("detection_probability", 0.9),
+            targets=targets,
+        )
+
+
+class RadarSimulator(AbstractSensor):
+    """Synthetic radar sensor that generates detections from scenario targets.
+
+    SensorFrame.data is a list[dict], where each dict has keys:
+    range_m, azimuth_deg, velocity_mps, rcs_dbsm.
+
+    Args:
+        config: RadarSimConfig with noise parameters and target list.
+        seed: Optional RNG seed for reproducibility.
+    """
+
+    def __init__(self, config: RadarSimConfig, seed: Optional[int] = None):
+        self._config = config
+        self._rng = np.random.RandomState(seed)
+        self._clock = SystemClock()
+        self._connected = False
+        self._start_time = 0.0
+        self._scan_count = 0
+        self._fov_half_rad = azimuth_deg_to_rad(config.fov_deg / 2)
+
+    def connect(self) -> bool:
+        self._connected = True
+        self._start_time = self._clock.now()
+        self._scan_count = 0
+        logger.info(
+            "Radar simulator connected: %d targets, %.0f Hz, %.0f m range",
+            len(self._config.targets),
+            self._config.scan_rate_hz,
+            self._config.max_range_m,
+        )
+        return True
+
+    def disconnect(self) -> None:
+        self._connected = False
+        logger.info("Radar simulator disconnected after %d scans", self._scan_count)
+
+    def read_frame(self) -> Optional[SensorFrame]:
+        """Generate one radar scan with detections and false alarms."""
+        if not self._connected:
+            return None
+
+        t = self._clock.now() - self._start_time
+        detections: list[dict] = []
+
+        # True target detections
+        for target in self._config.targets:
+            pos = target.position_at(t)
+            r, az = cartesian_to_polar(pos[0], pos[1])
+
+            # Check range and FOV
+            if r > self._config.max_range_m:
+                continue
+            if abs(az) > self._fov_half_rad:
+                continue
+
+            # Detection probability
+            if self._rng.rand() > self._config.detection_probability:
+                continue
+
+            # Add measurement noise
+            noisy_range = r + self._rng.randn() * self._config.noise_range_m
+            noisy_az_deg = azimuth_rad_to_deg(az) + self._rng.randn() * self._config.noise_azimuth_deg
+            radial_vel = self._compute_radial_velocity(pos, target.velocity)
+            noisy_vel = radial_vel + self._rng.randn() * self._config.noise_velocity_mps
+            noisy_rcs = target.rcs_dbsm + self._rng.randn() * self._config.noise_rcs_dbsm
+
+            detections.append({
+                "range_m": max(0.0, noisy_range),
+                "azimuth_deg": noisy_az_deg,
+                "velocity_mps": noisy_vel,
+                "rcs_dbsm": noisy_rcs,
+                "target_id": target.target_id,
+            })
+
+        # False alarms
+        detections.extend(self._generate_false_alarms())
+
+        self._scan_count += 1
+        return SensorFrame(
+            data=detections,
+            timestamp=self._clock.now(),
+            sensor_type=SensorType.RADAR,
+            frame_number=self._scan_count,
+            metadata={"scan_count": self._scan_count, "target_count": len(self._config.targets)},
+        )
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
+
+    def add_target(self, target: RadarTarget) -> None:
+        self._config.targets.append(target)
+
+    def remove_target(self, target_id: str) -> None:
+        self._config.targets = [t for t in self._config.targets if t.target_id != target_id]
+
+    def _compute_radial_velocity(
+        self, position: np.ndarray, velocity: np.ndarray
+    ) -> float:
+        """Compute radial (Doppler) velocity component toward the radar."""
+        r = np.linalg.norm(position)
+        if r < 1e-6:
+            return 0.0
+        unit = position / r
+        return float(np.dot(velocity, unit))
+
+    def _generate_false_alarms(self) -> list[dict]:
+        """Generate false alarm detections uniformly in the FOV."""
+        n_fa = self._rng.poisson(self._config.false_alarm_rate)
+        alarms = []
+        fov_half_deg = self._config.fov_deg / 2
+        for _ in range(n_fa):
+            r = self._rng.uniform(10.0, self._config.max_range_m)
+            az = self._rng.uniform(-fov_half_deg, fov_half_deg)
+            alarms.append({
+                "range_m": r,
+                "azimuth_deg": az,
+                "velocity_mps": self._rng.randn() * 5.0,
+                "rcs_dbsm": self._rng.uniform(-10, 20),
+            })
+        return alarms
+
+
+def radar_frame_to_detections(frame: SensorFrame) -> list[Detection]:
+    """Convert a radar SensorFrame into Detection objects."""
+    detections = []
+    for d in frame.data:
+        az_rad = azimuth_deg_to_rad(d["azimuth_deg"])
+        pos = polar_to_cartesian(d["range_m"], az_rad)
+        detections.append(Detection(
+            sensor_type=SensorType.RADAR,
+            timestamp=frame.timestamp,
+            range_m=d["range_m"],
+            azimuth_deg=d["azimuth_deg"],
+            velocity_mps=d["velocity_mps"],
+            rcs_dbsm=d["rcs_dbsm"],
+            position_3d=np.array([pos[0], pos[1], 0.0]),
+        ))
+    return detections

@@ -30,6 +30,8 @@ class HUDStyles:
     color_danger: Color = (0, 0, 255)         # Red
     color_background: Color = (0, 20, 0)      # Dark green tint
     color_panel_bg: Color = (0, 15, 0)        # Panel background
+    color_radar: Color = (255, 200, 0)       # Cyan for radar tracks
+    color_fused: Color = (255, 255, 0)       # Bright cyan for fused
 
     # Font
     font_face: int = cv2.FONT_HERSHEY_SIMPLEX
@@ -57,6 +59,8 @@ class HUDStyles:
             color_border=tuple(colors.get("border", [0, 100, 0])),
             color_danger=tuple(colors.get("danger", [0, 0, 255])),
             color_background=tuple(colors.get("background", [0, 20, 0])),
+            color_radar=tuple(colors.get("radar", [255, 200, 0])),
+            color_fused=tuple(colors.get("fused", [255, 255, 0])),
             overlay_alpha=config.get("overlay_alpha", 0.85),
             scanline_enabled=config.get("scanline", {}).get("enabled", True),
             scanline_spacing=config.get("scanline", {}).get("spacing", 3),

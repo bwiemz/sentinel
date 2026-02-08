@@ -251,3 +251,78 @@ class HUDElements:
         cv2.line(frame, (cx + 5, cy), (cx + 20, cy), color, 1, cv2.LINE_AA)
         cv2.line(frame, (cx, cy - 20), (cx, cy - 5), color, 1, cv2.LINE_AA)
         cv2.line(frame, (cx, cy + 5), (cx, cy + 20), color, 1, cv2.LINE_AA)
+
+    # === RADAR ELEMENTS ===
+
+    def draw_radar_blip(
+        self,
+        frame: np.ndarray,
+        azimuth_deg: float,
+        range_m: float,
+        track_id: str,
+        image_width: int,
+        camera_hfov_deg: float = 60.0,
+        is_fused: bool = False,
+    ) -> None:
+        """Draw a radar track as a diamond blip with range/azimuth label.
+
+        Maps radar azimuth to horizontal pixel position.
+        """
+        h, w = frame.shape[:2]
+        # Map azimuth to pixel x
+        px_x = int((azimuth_deg / camera_hfov_deg + 0.5) * image_width)
+        px_x = max(0, min(px_x, w - 1))
+        py = h - 50  # Bottom region
+
+        color = self.s.color_fused if is_fused else self.s.color_radar
+        size = 8
+
+        # Diamond shape
+        pts = np.array([
+            [px_x, py - size],
+            [px_x + size, py],
+            [px_x, py + size],
+            [px_x - size, py],
+        ], np.int32)
+        cv2.polylines(frame, [pts], True, color, 1, cv2.LINE_AA)
+
+        if is_fused:
+            cv2.fillPoly(frame, [pts], color)
+
+        # Label
+        label = f"R:{range_m / 1000:.1f}km"
+        cv2.putText(
+            frame, label, (px_x + 12, py + 4),
+            self.s.font_face, self.s.font_scale_small, color, 1, cv2.LINE_AA,
+        )
+        cv2.putText(
+            frame, track_id, (px_x + 12, py - 8),
+            self.s.font_face, self.s.font_scale_small, color, 1, cv2.LINE_AA,
+        )
+
+    def draw_radar_status_line(self, frame: np.ndarray, status: dict) -> None:
+        """Draw radar status in the status panel area."""
+        if not status.get("radar_connected", False):
+            return
+        text = f"RDR: {status.get('radar_track_count', 0)} TRK | {status.get('radar_detection_count', 0)} DET"
+        cv2.putText(
+            frame, text, (10, 126),
+            self.s.font_face, self.s.font_scale_small, self.s.color_radar, 1, cv2.LINE_AA,
+        )
+        fused = status.get("fused_track_count", 0)
+        if fused > 0:
+            cv2.putText(
+                frame, f"FUSED: {fused}", (10, 142),
+                self.s.font_face, self.s.font_scale_small, self.s.color_fused, 1, cv2.LINE_AA,
+            )
+
+    def draw_fusion_indicator(self, frame: np.ndarray, track: Track) -> None:
+        """Draw 'F' badge on a camera track that has been fused with radar."""
+        bbox = track.predicted_bbox
+        if bbox is None:
+            return
+        x2, y1 = int(bbox[2]), int(bbox[1])
+        cv2.putText(
+            frame, "F", (x2 + 4, y1 + 12),
+            self.s.font_face, self.s.font_scale, self.s.color_fused, 1, cv2.LINE_AA,
+        )
