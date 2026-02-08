@@ -1,7 +1,5 @@
 """Tests for RadarTrackManager."""
 
-import numpy as np
-import pytest
 from omegaconf import OmegaConf
 
 from sentinel.core.types import Detection, SensorType, TrackState
@@ -9,15 +7,17 @@ from sentinel.tracking.radar_track_manager import RadarTrackManager
 
 
 def _make_config():
-    return OmegaConf.create({
-        "filter": {"dt": 0.1, "type": "ekf"},
-        "association": {"gate_threshold": 50.0},
-        "track_management": {
-            "confirm_hits": 3,
-            "max_coast_frames": 5,
-            "max_tracks": 50,
-        },
-    })
+    return OmegaConf.create(
+        {
+            "filter": {"dt": 0.1, "type": "ekf"},
+            "association": {"gate_threshold": 50.0},
+            "track_management": {
+                "confirm_hits": 3,
+                "max_coast_frames": 5,
+                "max_tracks": 50,
+            },
+        }
+    )
 
 
 def _rdet(range_m=3000.0, azimuth_deg=0.0, velocity_mps=0.0):

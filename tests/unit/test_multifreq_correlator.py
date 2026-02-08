@@ -1,11 +1,9 @@
 """Tests for multi-frequency detection correlator."""
 
-import numpy as np
 import pytest
 
 from sentinel.core.types import Detection, SensorType
 from sentinel.fusion.multifreq_correlator import (
-    CorrelatedDetection,
     MultiFreqCorrelator,
 )
 
@@ -70,7 +68,7 @@ class TestMultiFreqCorrelator:
         """VHF-only detection should be flagged as stealth candidate."""
         dets = [
             _make_radar_det(5000, 10.0, 10.0, "x_band"),  # Conventional target
-            _make_radar_det(8000, 20.0, -5.0, "vhf"),      # VHF-only (stealth)
+            _make_radar_det(8000, 20.0, -5.0, "vhf"),  # VHF-only (stealth)
         ]
         corr = MultiFreqCorrelator(range_gate_m=100.0, azimuth_gate_deg=3.0)
         groups, _ = corr.correlate(dets)
@@ -91,7 +89,7 @@ class TestMultiFreqCorrelator:
         """Large RCS variation across bands indicates stealth."""
         dets = [
             _make_radar_det(5000, 10.0, -30.0, "x_band"),  # Very low at X-band
-            _make_radar_det(5010, 10.1, -5.0, "vhf"),       # Much higher at VHF
+            _make_radar_det(5010, 10.1, -5.0, "vhf"),  # Much higher at VHF
         ]
         corr = MultiFreqCorrelator(range_gate_m=100.0, azimuth_gate_deg=3.0)
         groups, _ = corr.correlate(dets)

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
@@ -18,7 +17,7 @@ from sentinel.core.types import Detection, SensorType, TargetType, ThermalBand
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
 from sentinel.sensors.physics import ThermalSignature
-from sentinel.utils.coords import cartesian_to_polar, azimuth_rad_to_deg
+from sentinel.utils.coords import azimuth_rad_to_deg, cartesian_to_polar
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +27,12 @@ class ThermalTarget:
     """A target visible to thermal sensors."""
 
     target_id: str
-    position: np.ndarray       # [x, y] meters at t=0
-    velocity: np.ndarray       # [vx, vy] m/s
+    position: np.ndarray  # [x, y] meters at t=0
+    velocity: np.ndarray  # [vx, vy] m/s
     target_type: TargetType = TargetType.CONVENTIONAL
-    mach: float = 0.0          # 0 = compute from velocity
+    mach: float = 0.0  # 0 = compute from velocity
     class_name: str = "unknown"
-    _signature: Optional[ThermalSignature] = field(default=None, repr=False)
+    _signature: ThermalSignature | None = field(default=None, repr=False)
 
     def __post_init__(self):
         if self._signature is None:
@@ -89,14 +88,16 @@ class ThermalSimConfig:
         scenario = cfg.get("scenario", {})
         for t in scenario.get("targets", []):
             tt_str = t.get("target_type", "conventional")
-            targets.append(ThermalTarget(
-                target_id=t.get("id", "TGT"),
-                position=np.array(t.get("position", [0, 0]), dtype=float),
-                velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
-                target_type=TargetType(tt_str),
-                mach=t.get("mach", 0.0),
-                class_name=t.get("class_name", "unknown"),
-            ))
+            targets.append(
+                ThermalTarget(
+                    target_id=t.get("id", "TGT"),
+                    position=np.array(t.get("position", [0, 0]), dtype=float),
+                    velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
+                    target_type=TargetType(tt_str),
+                    mach=t.get("mach", 0.0),
+                    class_name=t.get("class_name", "unknown"),
+                )
+            )
 
         return cls(
             frame_rate_hz=cfg.get("frame_rate_hz", 30.0),
@@ -124,7 +125,7 @@ class ThermalSimulator(AbstractSensor):
     azimuth_deg, elevation_deg, temperature_k, thermal_band, intensity, target_id
     """
 
-    def __init__(self, config: ThermalSimConfig, seed: Optional[int] = None):
+    def __init__(self, config: ThermalSimConfig, seed: int | None = None):
         self._config = config
         self._rng = np.random.RandomState(seed)
         self._clock = SystemClock()
@@ -140,7 +141,9 @@ class ThermalSimulator(AbstractSensor):
         bands_str = ", ".join(b.value for b in self._config.bands)
         logger.info(
             "Thermal simulator connected: %d targets, bands=[%s], %.0f Hz",
-            len(self._config.targets), bands_str, self._config.frame_rate_hz,
+            len(self._config.targets),
+            bands_str,
+            self._config.frame_rate_hz,
         )
         return True
 
@@ -152,7 +155,7 @@ class ThermalSimulator(AbstractSensor):
     def is_connected(self) -> bool:
         return self._connected
 
-    def read_frame(self) -> Optional[SensorFrame]:
+    def read_frame(self) -> SensorFrame | None:
         """Generate one thermal scan."""
         if not self._connected:
             return None
@@ -213,14 +216,16 @@ class ThermalSimulator(AbstractSensor):
             noisy_el = 0.0 + self._rng.randn() * self._config.noise_elevation_deg  # Flat scenario
             noisy_temp = temp + self._rng.randn() * self._config.noise_temperature_k
 
-            detections.append({
-                "azimuth_deg": noisy_az,
-                "elevation_deg": noisy_el,
-                "temperature_k": max(0.0, noisy_temp),
-                "thermal_band": band.value,
-                "intensity": intensity,
-                "target_id": target.target_id,
-            })
+            detections.append(
+                {
+                    "azimuth_deg": noisy_az,
+                    "elevation_deg": noisy_el,
+                    "temperature_k": max(0.0, noisy_temp),
+                    "thermal_band": band.value,
+                    "intensity": intensity,
+                    "target_id": target.target_id,
+                }
+            )
 
         # False alarms
         detections.extend(self._generate_false_alarms(band))
@@ -230,13 +235,15 @@ class ThermalSimulator(AbstractSensor):
         n_fa = self._rng.poisson(self._config.false_alarm_rate)
         alarms = []
         for _ in range(n_fa):
-            alarms.append({
-                "azimuth_deg": self._rng.uniform(-self._fov_half_deg, self._fov_half_deg),
-                "elevation_deg": self._rng.randn() * 2.0,
-                "temperature_k": self._config.ambient_temperature_k + self._rng.uniform(5, 50),
-                "thermal_band": band.value,
-                "intensity": self._rng.uniform(0.05, 0.3),
-            })
+            alarms.append(
+                {
+                    "azimuth_deg": self._rng.uniform(-self._fov_half_deg, self._fov_half_deg),
+                    "elevation_deg": self._rng.randn() * 2.0,
+                    "temperature_k": self._config.ambient_temperature_k + self._rng.uniform(5, 50),
+                    "thermal_band": band.value,
+                    "intensity": self._rng.uniform(0.05, 0.3),
+                }
+            )
         return alarms
 
 
@@ -247,13 +254,15 @@ def thermal_frame_to_detections(frame: SensorFrame) -> list[Detection]:
     """
     detections = []
     for d in frame.data:
-        detections.append(Detection(
-            sensor_type=SensorType.THERMAL,
-            timestamp=frame.timestamp,
-            azimuth_deg=d["azimuth_deg"],
-            elevation_deg=d.get("elevation_deg", 0.0),
-            temperature_k=d["temperature_k"],
-            thermal_band=d.get("thermal_band"),
-            intensity=d.get("intensity"),
-        ))
+        detections.append(
+            Detection(
+                sensor_type=SensorType.THERMAL,
+                timestamp=frame.timestamp,
+                azimuth_deg=d["azimuth_deg"],
+                elevation_deg=d.get("elevation_deg", 0.0),
+                temperature_k=d["temperature_k"],
+                thermal_band=d.get("thermal_band"),
+                intensity=d.get("intensity"),
+            )
+        )
     return detections

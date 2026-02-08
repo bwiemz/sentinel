@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import numpy as np
 
@@ -34,7 +33,7 @@ class YOLODetector(AbstractDetector):
         confidence: float = 0.25,
         iou_threshold: float = 0.45,
         device: str = "auto",
-        classes: Optional[list[int]] = None,
+        classes: list[int] | None = None,
         max_detections: int = 100,
         image_size: int = 640,
     ):
@@ -59,6 +58,16 @@ class YOLODetector(AbstractDetector):
 
     def detect(self, frame: np.ndarray, timestamp: float) -> list[Detection]:
         """Run YOLO inference on a BGR frame."""
+        if frame is None:
+            logger.warning("detect() received None frame, returning empty")
+            return []
+        if not isinstance(frame, np.ndarray):
+            logger.warning("detect() received non-ndarray frame (type=%s), returning empty", type(frame).__name__)
+            return []
+        if frame.ndim < 2 or frame.size == 0:
+            logger.warning("detect() received invalid frame (shape=%s), returning empty", frame.shape)
+            return []
+
         results = self._model(
             frame,
             conf=self._confidence,
@@ -82,14 +91,16 @@ class YOLODetector(AbstractDetector):
 
         for box in result.boxes:
             cls_id = int(box.cls[0].item())
-            detections.append(Detection(
-                sensor_type=SensorType.CAMERA,
-                timestamp=timestamp,
-                bbox=box.xyxy[0].cpu().numpy().astype(np.float32),
-                class_id=cls_id,
-                class_name=self._class_names.get(cls_id, f"class_{cls_id}"),
-                confidence=float(box.conf[0].item()),
-            ))
+            detections.append(
+                Detection(
+                    sensor_type=SensorType.CAMERA,
+                    timestamp=timestamp,
+                    bbox=box.xyxy[0].cpu().numpy().astype(np.float32),
+                    class_id=cls_id,
+                    class_name=self._class_names.get(cls_id, f"class_{cls_id}"),
+                    confidence=float(box.conf[0].item()),
+                )
+            )
 
         return detections
 
@@ -108,6 +119,7 @@ class YOLODetector(AbstractDetector):
         """Detect best available inference device."""
         try:
             import torch
+
             if torch.cuda.is_available():
                 return "cuda:0"
             if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():

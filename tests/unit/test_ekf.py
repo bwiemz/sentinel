@@ -20,7 +20,7 @@ class TestExtendedKalmanFilter:
         ekf.x = np.array([100.0, 0.0, 0.0, 0.0])
         z = ekf.h(ekf.x)
         assert z[0] == pytest.approx(100.0)  # range
-        assert z[1] == pytest.approx(0.0)    # azimuth
+        assert z[1] == pytest.approx(0.0)  # azimuth
 
     def test_h_function_along_y(self):
         ekf = ExtendedKalmanFilter()
@@ -66,10 +66,10 @@ class TestExtendedKalmanFilter:
         ekf = ExtendedKalmanFilter(dt=0.1)
         ekf.x = np.array([100.0, 20.0, 200.0, -10.0])
         ekf.predict()
-        assert ekf.x[0] == pytest.approx(102.0)   # x + vx*dt
-        assert ekf.x[1] == pytest.approx(20.0)     # vx unchanged
-        assert ekf.x[2] == pytest.approx(199.0)    # y + vy*dt
-        assert ekf.x[3] == pytest.approx(-10.0)    # vy unchanged
+        assert ekf.x[0] == pytest.approx(102.0)  # x + vx*dt
+        assert ekf.x[1] == pytest.approx(20.0)  # vx unchanged
+        assert ekf.x[2] == pytest.approx(199.0)  # y + vy*dt
+        assert ekf.x[3] == pytest.approx(-10.0)  # vy unchanged
 
     def test_predict_increases_uncertainty(self):
         ekf = ExtendedKalmanFilter()
@@ -101,10 +101,12 @@ class TestExtendedKalmanFilter:
         rng = np.random.RandomState(42)
         for _ in range(100):
             ekf.predict()
-            z = np.array([
-                true_range + rng.randn() * 5.0,
-                true_azimuth + rng.randn() * np.radians(1.0),
-            ])
+            z = np.array(
+                [
+                    true_range + rng.randn() * 5.0,
+                    true_azimuth + rng.randn() * np.radians(1.0),
+                ]
+            )
             ekf.update(z)
 
         pos = ekf.position
@@ -128,10 +130,12 @@ class TestExtendedKalmanFilter:
             true_az = np.arctan2(true_y, true_x)
 
             ekf.predict()
-            z = np.array([
-                true_range + rng.randn() * 5.0,
-                true_az + rng.randn() * np.radians(1.0),
-            ])
+            z = np.array(
+                [
+                    true_range + rng.randn() * 5.0,
+                    true_az + rng.randn() * np.radians(1.0),
+                ]
+            )
             ekf.update(z)
 
         # After 200 steps (20s), target at (1200, 100)
@@ -179,7 +183,7 @@ class TestExtendedKalmanFilter:
         rng = np.random.RandomState(42)
         for _ in range(50):
             ekf.predict()
-            r = np.sqrt(ekf.x[0]**2 + ekf.x[2]**2)
+            r = np.sqrt(ekf.x[0] ** 2 + ekf.x[2] ** 2)
             az = np.arctan2(ekf.x[2], ekf.x[0])
             z = np.array([r + rng.randn() * 5.0, az + rng.randn() * 0.01])
             ekf.update(z)
@@ -191,7 +195,7 @@ class TestExtendedKalmanFilter:
         rng = np.random.RandomState(42)
         for _ in range(50):
             ekf.predict()
-            r = np.sqrt(ekf.x[0]**2 + ekf.x[2]**2)
+            r = np.sqrt(ekf.x[0] ** 2 + ekf.x[2] ** 2)
             az = np.arctan2(ekf.x[2], ekf.x[0])
             z = np.array([r + rng.randn() * 5.0, az + rng.randn() * 0.01])
             ekf.update(z)

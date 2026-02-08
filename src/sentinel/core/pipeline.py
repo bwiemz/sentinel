@@ -2,12 +2,14 @@
 
 Supports dual-sensor operation (camera + radar) with track-level fusion
 when radar is enabled, or camera-only mode when disabled.
+Includes graceful degradation: individual sensor failures are isolated
+and auto-disabled after consecutive errors without crashing the pipeline.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Optional
+import time
 
 import cv2
 import numpy as np
@@ -16,13 +18,36 @@ from omegaconf import DictConfig, OmegaConf
 from sentinel.core.bus import EventBus
 from sentinel.core.clock import FrameTimer, SystemClock
 from sentinel.core.types import Detection
-from sentinel.sensors.camera import CameraAdapter
 from sentinel.detection.yolo import YOLODetector
+from sentinel.sensors.camera import CameraAdapter
 from sentinel.tracking.track import Track
 from sentinel.tracking.track_manager import TrackManager
 from sentinel.ui.hud.renderer import HUDRenderer
 
 logger = logging.getLogger(__name__)
+
+
+class _SensorHealth:
+    """Tracks consecutive error counts for a sensor subsystem."""
+
+    __slots__ = ("name", "error_count", "max_errors", "enabled")
+
+    def __init__(self, name: str, max_errors: int, enabled: bool = True):
+        self.name = name
+        self.error_count = 0
+        self.max_errors = max_errors
+        self.enabled = enabled
+
+    def record_success(self) -> None:
+        self.error_count = 0
+
+    def record_error(self) -> bool:
+        """Record an error. Returns True if sensor was just disabled."""
+        self.error_count += 1
+        if self.error_count >= self.max_errors and self.enabled:
+            self.enabled = False
+            return True
+        return False
 
 
 class SentinelPipeline:
@@ -38,6 +63,32 @@ class SentinelPipeline:
         self._timer = FrameTimer(window_size=60)
         self._bus = EventBus()
         self._running = False
+
+        # Graceful degradation settings
+        sys_cfg = config.sentinel.get("system", {})
+        self._graceful_degradation = sys_cfg.get("graceful_degradation", True)
+        max_errors = sys_cfg.get("max_sensor_errors", 10)
+
+        # Timing instrumentation (ms per stage, exponential moving average)
+        self._timing: dict[str, float] = {
+            "detect_ms": 0.0,
+            "track_ms": 0.0,
+            "radar_ms": 0.0,
+            "fusion_ms": 0.0,
+            "render_ms": 0.0,
+        }
+        self._timing_alpha = 0.1  # EMA smoothing factor
+
+        # Per-sensor health trackers
+        self._sensor_health: dict[str, _SensorHealth] = {
+            "camera": _SensorHealth("camera", max_errors),
+            "detector": _SensorHealth("detector", max_errors),
+            "radar": _SensorHealth("radar", max_errors),
+            "multifreq_radar": _SensorHealth("multifreq_radar", max_errors),
+            "thermal": _SensorHealth("thermal", max_errors),
+            "quantum_radar": _SensorHealth("quantum_radar", max_errors),
+            "fusion": _SensorHealth("fusion", max_errors),
+        }
 
         # Initialize camera sensor
         cam_cfg = config.sentinel.sensors.camera
@@ -71,7 +122,7 @@ class SentinelPipeline:
         self._hud = HUDRenderer(hud_cfg) if self._hud_enabled else None
 
         # State
-        self._latest_frame: Optional[np.ndarray] = None
+        self._latest_frame: np.ndarray | None = None
         self._latest_detections: list[Detection] = []
         self._latest_tracks: list[Track] = []
 
@@ -124,9 +175,9 @@ class SentinelPipeline:
 
     def _init_radar(self, config: DictConfig) -> None:
         """Initialize radar simulator, radar tracker, and fusion module."""
+        from sentinel.fusion.track_fusion import TrackFusion
         from sentinel.sensors.radar_sim import RadarSimConfig, RadarSimulator
         from sentinel.tracking.radar_track_manager import RadarTrackManager
-        from sentinel.fusion.track_fusion import TrackFusion
 
         radar_cfg = config.sentinel.sensors.radar
         sim_config = RadarSimConfig.from_omegaconf(radar_cfg)
@@ -134,20 +185,22 @@ class SentinelPipeline:
 
         # Build radar tracking config
         radar_tracking = config.sentinel.get("tracking", {}).get("radar", {})
-        radar_track_cfg = OmegaConf.create({
-            "filter": {
-                "dt": radar_tracking.get("filter", {}).get("dt", 1.0 / radar_cfg.get("scan_rate_hz", 10)),
-                "type": "ekf",
-            },
-            "association": {
-                "gate_threshold": radar_tracking.get("association", {}).get("gate_threshold", 9.21),
-            },
-            "track_management": {
-                "confirm_hits": radar_tracking.get("track_management", {}).get("confirm_hits", 3),
-                "max_coast_frames": radar_tracking.get("track_management", {}).get("max_coast_frames", 5),
-                "max_tracks": radar_tracking.get("track_management", {}).get("max_tracks", 50),
-            },
-        })
+        radar_track_cfg = OmegaConf.create(
+            {
+                "filter": {
+                    "dt": radar_tracking.get("filter", {}).get("dt", 1.0 / radar_cfg.get("scan_rate_hz", 10)),
+                    "type": "ekf",
+                },
+                "association": {
+                    "gate_threshold": radar_tracking.get("association", {}).get("gate_threshold", 9.21),
+                },
+                "track_management": {
+                    "confirm_hits": radar_tracking.get("track_management", {}).get("confirm_hits", 3),
+                    "max_coast_frames": radar_tracking.get("track_management", {}).get("max_coast_frames", 5),
+                    "max_tracks": radar_tracking.get("track_management", {}).get("max_tracks", 50),
+                },
+            }
+        )
         self._radar_track_manager = RadarTrackManager(radar_track_cfg)
 
         # Fusion
@@ -163,8 +216,8 @@ class SentinelPipeline:
 
     def _init_multifreq_radar(self, config: DictConfig) -> None:
         """Initialize multi-frequency radar simulator and correlator."""
-        from sentinel.sensors.multifreq_radar_sim import MultiFreqRadarConfig, MultiFreqRadarSimulator
         from sentinel.fusion.multifreq_correlator import MultiFreqCorrelator
+        from sentinel.sensors.multifreq_radar_sim import MultiFreqRadarConfig, MultiFreqRadarSimulator
 
         mfr_cfg = config.sentinel.sensors.multifreq_radar
         mfr_config = MultiFreqRadarConfig.from_omegaconf(mfr_cfg)
@@ -181,16 +234,21 @@ class SentinelPipeline:
         # Also set up radar tracking if not already enabled via single radar
         if not self._radar_enabled:
             from sentinel.tracking.radar_track_manager import RadarTrackManager
+
             radar_tracking = config.sentinel.get("tracking", {}).get("radar", {})
-            radar_track_cfg = OmegaConf.create({
-                "filter": {"dt": 1.0 / mfr_cfg.get("scan_rate_hz", 10), "type": "ekf"},
-                "association": {"gate_threshold": radar_tracking.get("association", {}).get("gate_threshold", 9.21)},
-                "track_management": {
-                    "confirm_hits": radar_tracking.get("track_management", {}).get("confirm_hits", 3),
-                    "max_coast_frames": radar_tracking.get("track_management", {}).get("max_coast_frames", 5),
-                    "max_tracks": radar_tracking.get("track_management", {}).get("max_tracks", 50),
-                },
-            })
+            radar_track_cfg = OmegaConf.create(
+                {
+                    "filter": {"dt": 1.0 / mfr_cfg.get("scan_rate_hz", 10), "type": "ekf"},
+                    "association": {
+                        "gate_threshold": radar_tracking.get("association", {}).get("gate_threshold", 9.21)
+                    },
+                    "track_management": {
+                        "confirm_hits": radar_tracking.get("track_management", {}).get("confirm_hits", 3),
+                        "max_coast_frames": radar_tracking.get("track_management", {}).get("max_coast_frames", 5),
+                        "max_tracks": radar_tracking.get("track_management", {}).get("max_tracks", 50),
+                    },
+                }
+            )
             self._radar_track_manager = RadarTrackManager(radar_track_cfg)
 
         logger.info("Multi-frequency radar subsystem initialized (bands: %s)", mfr_cfg.get("bands", []))
@@ -205,20 +263,24 @@ class SentinelPipeline:
         self._thermal = ThermalSimulator(thm_config)
 
         thermal_tracking = config.sentinel.get("tracking", {}).get("thermal", {})
-        thermal_track_cfg = OmegaConf.create({
-            "filter": {
-                "dt": thermal_tracking.get("filter", {}).get("dt", 0.033),
-                "assumed_initial_range_m": thermal_tracking.get("filter", {}).get("assumed_initial_range_m", 10000.0),
-            },
-            "association": {
-                "gate_threshold": thermal_tracking.get("association", {}).get("gate_threshold", 9.21),
-            },
-            "track_management": {
-                "confirm_hits": thermal_tracking.get("track_management", {}).get("confirm_hits", 3),
-                "max_coast_frames": thermal_tracking.get("track_management", {}).get("max_coast_frames", 10),
-                "max_tracks": thermal_tracking.get("track_management", {}).get("max_tracks", 50),
-            },
-        })
+        thermal_track_cfg = OmegaConf.create(
+            {
+                "filter": {
+                    "dt": thermal_tracking.get("filter", {}).get("dt", 0.033),
+                    "assumed_initial_range_m": thermal_tracking.get("filter", {}).get(
+                        "assumed_initial_range_m", 10000.0
+                    ),
+                },
+                "association": {
+                    "gate_threshold": thermal_tracking.get("association", {}).get("gate_threshold", 9.21),
+                },
+                "track_management": {
+                    "confirm_hits": thermal_tracking.get("track_management", {}).get("confirm_hits", 3),
+                    "max_coast_frames": thermal_tracking.get("track_management", {}).get("max_coast_frames", 10),
+                    "max_tracks": thermal_tracking.get("track_management", {}).get("max_tracks", 50),
+                },
+            }
+        )
         self._thermal_track_manager = ThermalTrackManager(thermal_track_cfg)
 
         logger.info("Thermal subsystem initialized")
@@ -234,20 +296,22 @@ class SentinelPipeline:
 
         # Reuse RadarTrackManager with quantum radar tracking params
         qr_tracking = config.sentinel.get("tracking", {}).get("quantum_radar", {})
-        qr_track_cfg = OmegaConf.create({
-            "filter": {
-                "dt": qr_tracking.get("filter", {}).get("dt", 1.0 / qr_cfg.get("scan_rate_hz", 10)),
-                "type": "ekf",
-            },
-            "association": {
-                "gate_threshold": qr_tracking.get("association", {}).get("gate_threshold", 9.21),
-            },
-            "track_management": {
-                "confirm_hits": qr_tracking.get("track_management", {}).get("confirm_hits", 3),
-                "max_coast_frames": qr_tracking.get("track_management", {}).get("max_coast_frames", 5),
-                "max_tracks": qr_tracking.get("track_management", {}).get("max_tracks", 50),
-            },
-        })
+        qr_track_cfg = OmegaConf.create(
+            {
+                "filter": {
+                    "dt": qr_tracking.get("filter", {}).get("dt", 1.0 / qr_cfg.get("scan_rate_hz", 10)),
+                    "type": "ekf",
+                },
+                "association": {
+                    "gate_threshold": qr_tracking.get("association", {}).get("gate_threshold", 9.21),
+                },
+                "track_management": {
+                    "confirm_hits": qr_tracking.get("track_management", {}).get("confirm_hits", 3),
+                    "max_coast_frames": qr_tracking.get("track_management", {}).get("max_coast_frames", 5),
+                    "max_tracks": qr_tracking.get("track_management", {}).get("max_tracks", 50),
+                },
+            }
+        )
         self._quantum_radar_track_manager = RadarTrackManager(qr_track_cfg)
 
         logger.info("Quantum radar subsystem initialized (receiver: %s)", qr_cfg.get("receiver_type", "opa"))
@@ -332,74 +396,173 @@ class SentinelPipeline:
 
         while self._running:
             # 1. Read camera frame
-            frame_data = self._camera.read_frame()
+            try:
+                frame_data = self._camera.read_frame()
+            except Exception:
+                logger.exception("Camera read failed")
+                health = self._sensor_health["camera"]
+                disabled = health.record_error()
+                if disabled:
+                    logger.warning("Camera disabled after %d consecutive errors", health.max_errors)
+                if not self._graceful_degradation or not health.enabled:
+                    break
+                continue
+
             if frame_data is None:
                 if not self._camera.is_connected:
                     logger.warning("Camera disconnected.")
                     break
                 continue
 
+            self._sensor_health["camera"].record_success()
             self._timer.tick()
             frame = frame_data.data
             timestamp = frame_data.timestamp
 
             # 2. Camera detection + tracking
-            detections = self._detector.detect(frame, timestamp)
-            self._latest_detections = detections
-            tracks = self._track_manager.step(detections)
-            self._latest_tracks = tracks
+            try:
+                t0 = time.perf_counter()
+                detections = self._detector.detect(frame, timestamp)
+                t1 = time.perf_counter()
+                self._latest_detections = detections
+                tracks = self._track_manager.step(detections)
+                t2 = time.perf_counter()
+                self._latest_tracks = tracks
+                self._sensor_health["detector"].record_success()
+                self._update_timing("detect_ms", (t1 - t0) * 1000)
+                self._update_timing("track_ms", (t2 - t1) * 1000)
+            except Exception:
+                logger.exception("Detection/tracking failed")
+                health = self._sensor_health["detector"]
+                disabled = health.record_error()
+                if disabled:
+                    logger.warning("Detector disabled after %d consecutive errors", health.max_errors)
+                if not self._graceful_degradation or not health.enabled:
+                    break
+                detections = []
+                tracks = self._latest_tracks
 
             # 3. Radar scan (at radar rate, if enabled)
-            if self._radar_enabled and self._radar is not None:
-                if (timestamp - last_radar_time) >= radar_interval:
+            if (
+                self._radar_enabled
+                and self._radar is not None
+                and self._sensor_health["radar"].enabled
+                and (timestamp - last_radar_time) >= radar_interval
+            ):
+                try:
+                    t_radar = time.perf_counter()
                     self._process_radar_scan()
-                    last_radar_time = timestamp
+                    self._update_timing("radar_ms", (time.perf_counter() - t_radar) * 1000)
+                    self._sensor_health["radar"].record_success()
+                except Exception:
+                    logger.exception("Radar scan failed")
+                    if self._sensor_health["radar"].record_error():
+                        logger.warning(
+                            "Radar disabled after %d consecutive errors", self._sensor_health["radar"].max_errors
+                        )
+                last_radar_time = timestamp
 
             # 3b. Multi-frequency radar scan (if enabled)
-            if self._multifreq_radar_enabled and self._multifreq_radar is not None:
-                if (timestamp - last_mfr_time) >= mfr_interval:
+            if (
+                self._multifreq_radar_enabled
+                and self._multifreq_radar is not None
+                and self._sensor_health["multifreq_radar"].enabled
+                and (timestamp - last_mfr_time) >= mfr_interval
+            ):
+                try:
                     self._process_multifreq_radar_scan()
-                    last_mfr_time = timestamp
+                    self._sensor_health["multifreq_radar"].record_success()
+                except Exception:
+                    logger.exception("Multi-freq radar scan failed")
+                    if self._sensor_health["multifreq_radar"].record_error():
+                        logger.warning(
+                            "Multi-freq radar disabled after %d consecutive errors",
+                            self._sensor_health["multifreq_radar"].max_errors,
+                        )
+                last_mfr_time = timestamp
 
             # 3c. Thermal scan (if enabled)
-            if self._thermal_enabled and self._thermal is not None:
-                if (timestamp - last_thermal_time) >= thermal_interval:
+            if (
+                self._thermal_enabled
+                and self._thermal is not None
+                and self._sensor_health["thermal"].enabled
+                and (timestamp - last_thermal_time) >= thermal_interval
+            ):
+                try:
                     self._process_thermal_scan()
-                    last_thermal_time = timestamp
+                    self._sensor_health["thermal"].record_success()
+                except Exception:
+                    logger.exception("Thermal scan failed")
+                    if self._sensor_health["thermal"].record_error():
+                        logger.warning(
+                            "Thermal disabled after %d consecutive errors", self._sensor_health["thermal"].max_errors
+                        )
+                last_thermal_time = timestamp
 
             # 3d. Quantum radar scan (if enabled)
-            if self._quantum_radar_enabled and self._quantum_radar is not None:
-                if (timestamp - last_qr_time) >= qr_interval:
+            if (
+                self._quantum_radar_enabled
+                and self._quantum_radar is not None
+                and self._sensor_health["quantum_radar"].enabled
+                and (timestamp - last_qr_time) >= qr_interval
+            ):
+                try:
                     self._process_quantum_radar_scan()
-                    last_qr_time = timestamp
+                    self._sensor_health["quantum_radar"].record_success()
+                except Exception:
+                    logger.exception("Quantum radar scan failed")
+                    if self._sensor_health["quantum_radar"].record_error():
+                        logger.warning(
+                            "Quantum radar disabled after %d consecutive errors",
+                            self._sensor_health["quantum_radar"].max_errors,
+                        )
+                last_qr_time = timestamp
 
             # 4. Fusion (every camera frame, using latest tracks)
-            if self._multi_sensor_fusion is not None:
-                # Enhanced multi-sensor fusion (Phase 5+6)
-                self._latest_enhanced_fused = self._multi_sensor_fusion.fuse(
-                    self._latest_tracks,
-                    self._latest_radar_tracks,
-                    self._latest_thermal_tracks if self._thermal_enabled else None,
-                    self._latest_correlated_detections if self._multifreq_radar_enabled else None,
-                    quantum_radar_tracks=self._latest_quantum_radar_tracks if self._quantum_radar_enabled else None,
-                )
-            elif self._track_fusion is not None:
-                # Legacy camera+radar fusion (Phase 4)
-                self._latest_fused_tracks = self._track_fusion.fuse(
-                    self._latest_tracks,
-                    self._latest_radar_tracks,
-                )
+            try:
+                t_fuse = time.perf_counter()
+                if self._multi_sensor_fusion is not None:
+                    self._latest_enhanced_fused = self._multi_sensor_fusion.fuse(
+                        self._latest_tracks,
+                        self._latest_radar_tracks,
+                        self._latest_thermal_tracks if self._thermal_enabled else None,
+                        self._latest_correlated_detections if self._multifreq_radar_enabled else None,
+                        quantum_radar_tracks=self._latest_quantum_radar_tracks if self._quantum_radar_enabled else None,
+                    )
+                elif self._track_fusion is not None:
+                    self._latest_fused_tracks = self._track_fusion.fuse(
+                        self._latest_tracks,
+                        self._latest_radar_tracks,
+                    )
+                self._update_timing("fusion_ms", (time.perf_counter() - t_fuse) * 1000)
+                self._sensor_health["fusion"].record_success()
+            except Exception:
+                logger.exception("Fusion failed")
+                self._sensor_health["fusion"].record_error()
 
             # 5. Render HUD
             if self._hud is not None:
-                status = self.get_system_status()
-                display = self._hud.render(
-                    frame, tracks, detections, status,
-                    radar_tracks=self._latest_radar_tracks if self._radar_enabled or self._multifreq_radar_enabled else None,
-                    fused_tracks=self._latest_fused_tracks if self._radar_enabled and not self._multi_sensor_fusion else None,
-                    thermal_tracks=self._latest_thermal_tracks if self._thermal_enabled else None,
-                    enhanced_fused_tracks=self._latest_enhanced_fused if self._multi_sensor_fusion else None,
-                )
+                try:
+                    t_render = time.perf_counter()
+                    status = self.get_system_status()
+                    display = self._hud.render(
+                        frame,
+                        tracks,
+                        detections,
+                        status,
+                        radar_tracks=self._latest_radar_tracks
+                        if self._radar_enabled or self._multifreq_radar_enabled
+                        else None,
+                        fused_tracks=self._latest_fused_tracks
+                        if self._radar_enabled and not self._multi_sensor_fusion
+                        else None,
+                        thermal_tracks=self._latest_thermal_tracks if self._thermal_enabled else None,
+                        enhanced_fused_tracks=self._latest_enhanced_fused if self._multi_sensor_fusion else None,
+                    )
+                    self._update_timing("render_ms", (time.perf_counter() - t_render) * 1000)
+                except Exception:
+                    logger.exception("HUD render failed")
+                    display = frame
             else:
                 display = frame
 
@@ -412,6 +575,11 @@ class SentinelPipeline:
                 if key == ord("q"):
                     logger.info("Quit requested.")
                     self._running = False
+
+    def _update_timing(self, key: str, value_ms: float) -> None:
+        """Update an EMA timing measurement."""
+        a = self._timing_alpha
+        self._timing[key] = a * value_ms + (1 - a) * self._timing.get(key, value_ms)
 
     def _process_radar_scan(self) -> None:
         """Read and process one radar scan."""
@@ -473,30 +641,45 @@ class SentinelPipeline:
     def _shutdown(self) -> None:
         logger.info("Shutting down pipeline...")
         self._running = False
-        self._camera.disconnect()
-        if self._radar is not None:
-            self._radar.disconnect()
-        if self._multifreq_radar is not None:
-            self._multifreq_radar.disconnect()
-        if self._thermal is not None:
-            self._thermal.disconnect()
-        if self._quantum_radar is not None:
-            self._quantum_radar.disconnect()
-        cv2.destroyAllWindows()
+
+        # Disconnect each sensor in isolation so one failure doesn't prevent others
+        for name, sensor in [
+            ("camera", self._camera),
+            ("radar", self._radar),
+            ("multifreq_radar", self._multifreq_radar),
+            ("thermal", self._thermal),
+            ("quantum_radar", self._quantum_radar),
+        ]:
+            if sensor is not None:
+                try:
+                    sensor.disconnect()
+                except Exception:
+                    logger.exception("Error disconnecting %s", name)
+
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
+            logger.exception("Error destroying OpenCV windows")
+
         logger.info("Pipeline stopped. Final stats:")
-        logger.info("  Camera tracks created: %d", len(self._track_manager._tracks) + self._track_manager.track_count)
-        logger.info("  Active camera tracks: %d", self._track_manager.track_count)
-        if self._radar_enabled and self._radar_track_manager is not None:
-            logger.info("  Active radar tracks: %d", self._radar_track_manager.track_count)
-            logger.info("  Fused tracks: %d", len(self._latest_fused_tracks))
-        if self._multifreq_radar_enabled:
-            logger.info("  Correlated detections: %d", len(self._latest_correlated_detections))
-        if self._thermal_enabled and self._thermal_track_manager is not None:
-            logger.info("  Active thermal tracks: %d", self._thermal_track_manager.track_count)
-        if self._quantum_radar_enabled and self._quantum_radar_track_manager is not None:
-            logger.info("  Active quantum radar tracks: %d", self._quantum_radar_track_manager.track_count)
-        if self._multi_sensor_fusion is not None:
-            logger.info("  Enhanced fused tracks: %d", len(self._latest_enhanced_fused))
+        try:
+            logger.info(
+                "  Camera tracks created: %d", len(self._track_manager._tracks) + self._track_manager.track_count
+            )
+            logger.info("  Active camera tracks: %d", self._track_manager.track_count)
+            if self._radar_enabled and self._radar_track_manager is not None:
+                logger.info("  Active radar tracks: %d", self._radar_track_manager.track_count)
+                logger.info("  Fused tracks: %d", len(self._latest_fused_tracks))
+            if self._multifreq_radar_enabled:
+                logger.info("  Correlated detections: %d", len(self._latest_correlated_detections))
+            if self._thermal_enabled and self._thermal_track_manager is not None:
+                logger.info("  Active thermal tracks: %d", self._thermal_track_manager.track_count)
+            if self._quantum_radar_enabled and self._quantum_radar_track_manager is not None:
+                logger.info("  Active quantum radar tracks: %d", self._quantum_radar_track_manager.track_count)
+            if self._multi_sensor_fusion is not None:
+                logger.info("  Enhanced fused tracks: %d", len(self._latest_enhanced_fused))
+        except Exception:
+            logger.exception("Error logging final stats")
 
     def get_system_status(self) -> dict:
         status = {
@@ -506,6 +689,10 @@ class SentinelPipeline:
             "confirmed_count": len(self._track_manager.confirmed_tracks),
             "camera_connected": self._camera.is_connected,
             "uptime": self._clock.elapsed(),
+            "sensor_health": {
+                name: {"enabled": h.enabled, "error_count": h.error_count} for name, h in self._sensor_health.items()
+            },
+            "timing_ms": dict(self._timing),
         }
         if self._radar_enabled:
             status["radar_connected"] = self._radar.is_connected if self._radar else False
@@ -519,10 +706,14 @@ class SentinelPipeline:
             status["correlated_count"] = len(self._latest_correlated_detections)
         if self._thermal_enabled:
             status["thermal_connected"] = self._thermal.is_connected if self._thermal else False
-            status["thermal_track_count"] = self._thermal_track_manager.track_count if self._thermal_track_manager else 0
+            status["thermal_track_count"] = (
+                self._thermal_track_manager.track_count if self._thermal_track_manager else 0
+            )
         if self._quantum_radar_enabled:
             status["quantum_radar_connected"] = self._quantum_radar.is_connected if self._quantum_radar else False
-            status["quantum_radar_track_count"] = self._quantum_radar_track_manager.track_count if self._quantum_radar_track_manager else 0
+            status["quantum_radar_track_count"] = (
+                self._quantum_radar_track_manager.track_count if self._quantum_radar_track_manager else 0
+            )
         if self._multi_sensor_fusion is not None:
             status["fused_track_count"] = len(self._latest_enhanced_fused)
             # Threat counts
@@ -536,5 +727,5 @@ class SentinelPipeline:
     def get_track_snapshot(self) -> list[Track]:
         return self._latest_tracks
 
-    def get_latest_hud_frame(self) -> Optional[np.ndarray]:
+    def get_latest_hud_frame(self) -> np.ndarray | None:
         return self._latest_frame

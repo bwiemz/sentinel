@@ -12,7 +12,6 @@ from __future__ import annotations
 import enum
 import math
 from dataclasses import dataclass, field
-from typing import Optional
 
 from sentinel.core.types import RadarBand, TargetType, ThermalBand
 
@@ -21,11 +20,11 @@ from sentinel.core.types import RadarBand, TargetType, ThermalBand
 # Conventional targets have roughly flat RCS across bands.
 _RCS_OFFSET_DB: dict[tuple[RadarBand, TargetType], float] = {
     # Stealth: large gains at low frequencies
-    (RadarBand.VHF, TargetType.STEALTH): 25.0,      # +25 dB (100-1000x)
-    (RadarBand.UHF, TargetType.STEALTH): 22.0,      # +22 dB
-    (RadarBand.L_BAND, TargetType.STEALTH): 15.0,   # +15 dB
-    (RadarBand.S_BAND, TargetType.STEALTH): 7.0,    # +7 dB
-    (RadarBand.X_BAND, TargetType.STEALTH): 0.0,    # baseline
+    (RadarBand.VHF, TargetType.STEALTH): 25.0,  # +25 dB (100-1000x)
+    (RadarBand.UHF, TargetType.STEALTH): 22.0,  # +22 dB
+    (RadarBand.L_BAND, TargetType.STEALTH): 15.0,  # +15 dB
+    (RadarBand.S_BAND, TargetType.STEALTH): 7.0,  # +7 dB
+    (RadarBand.X_BAND, TargetType.STEALTH): 0.0,  # baseline
     # Conventional: roughly flat
     (RadarBand.VHF, TargetType.CONVENTIONAL): 1.0,
     (RadarBand.UHF, TargetType.CONVENTIONAL): 0.5,
@@ -134,11 +133,13 @@ class ThermalSignature:
     ambient_k: float = 280.0  # Background temperature
 
     # Engine exhaust base temperatures (Kelvin) by target type
-    _ENGINE_BASE_K: dict[TargetType, float] = field(default_factory=lambda: {
-        TargetType.CONVENTIONAL: 700.0,   # ~427 C
-        TargetType.STEALTH: 500.0,        # Cooled exhaust
-        TargetType.HYPERSONIC: 900.0,     # Scramjet
-    })
+    _ENGINE_BASE_K: dict[TargetType, float] = field(
+        default_factory=lambda: {
+            TargetType.CONVENTIONAL: 700.0,  # ~427 C
+            TargetType.STEALTH: 500.0,  # Cooled exhaust
+            TargetType.HYPERSONIC: 900.0,  # Scramjet
+        }
+    )
 
     def temperature_at_mach(self, mach: float) -> dict[str, float]:
         """Compute temperatures for different components at given Mach.
@@ -154,11 +155,11 @@ class ThermalSignature:
         # Aerodynamic heating: T_stag = T_amb * (1 + 0.2 * M^2) for air (gamma=1.4)
         # Leading edge sees stagnation temperature
         recovery_factor = 0.85  # Turbulent boundary layer
-        t_leading = self.ambient_k * (1.0 + recovery_factor * 0.2 * mach ** 2)
+        t_leading = self.ambient_k * (1.0 + recovery_factor * 0.2 * mach**2)
 
         # Body surface: lower recovery factor
         body_recovery = 0.70
-        t_body = self.ambient_k * (1.0 + body_recovery * 0.2 * mach ** 2)
+        t_body = self.ambient_k * (1.0 + body_recovery * 0.2 * mach**2)
 
         return {
             "engine": t_engine,
@@ -207,7 +208,7 @@ def combined_detection_probability(probs: list[float]) -> float:
         return 0.0
     product = 1.0
     for p in probs:
-        product *= (1.0 - max(0.0, min(1.0, p)))
+        product *= 1.0 - max(0.0, min(1.0, p))
     return 1.0 - product
 
 
@@ -224,25 +225,26 @@ def combined_detection_probability(probs: list[float]) -> float:
 # ---------------------------------------------------------------------------
 
 # Physical constants
-_PLANCK_H = 6.62607015e-34   # J*s
+_PLANCK_H = 6.62607015e-34  # J*s
 _BOLTZMANN_K = 1.380649e-23  # J/K
 _SPEED_OF_LIGHT = 2.99792458e8  # m/s
 
 
 class ReceiverType(enum.Enum):
     """Quantum illumination receiver architectures."""
-    OPA = "opa"                    # Optical Parametric Amplifier (3 dB, demonstrated)
-    SFG = "sfg"                    # Sum-Frequency Generation (up to 6 dB, theoretical)
+
+    OPA = "opa"  # Optical Parametric Amplifier (3 dB, demonstrated)
+    SFG = "sfg"  # Sum-Frequency Generation (up to 6 dB, theoretical)
     PHASE_CONJUGATE = "phase_conjugate"  # Phase-Conjugate receiver (3 dB)
-    OPTIMAL = "optimal"            # Theoretical optimal (6 dB, Helstrom bound)
+    OPTIMAL = "optimal"  # Theoretical optimal (6 dB, Helstrom bound)
 
 
 # Fraction of theoretical QI advantage achieved by each receiver
 _RECEIVER_EFFICIENCY: dict[ReceiverType, float] = {
-    ReceiverType.OPA: 0.5,             # 3 dB of 6 dB
-    ReceiverType.SFG: 0.9,             # Near-optimal
-    ReceiverType.PHASE_CONJUGATE: 0.5, # 3 dB of 6 dB
-    ReceiverType.OPTIMAL: 1.0,         # Full 6 dB
+    ReceiverType.OPA: 0.5,  # 3 dB of 6 dB
+    ReceiverType.SFG: 0.9,  # Near-optimal
+    ReceiverType.PHASE_CONJUGATE: 0.5,  # 3 dB of 6 dB
+    ReceiverType.OPTIMAL: 1.0,  # Full 6 dB
 }
 
 
@@ -281,8 +283,8 @@ def channel_transmissivity(
     """
     if range_m <= 0 or rcs_m2 <= 0:
         return 0.0
-    numerator = rcs_m2 * antenna_gain ** 2 * wavelength_m ** 2
-    denominator = (4.0 * math.pi) ** 3 * range_m ** 4
+    numerator = rcs_m2 * antenna_gain**2 * wavelength_m**2
+    denominator = (4.0 * math.pi) ** 3 * range_m**4
     return min(1.0, numerator / denominator)
 
 
@@ -331,7 +333,7 @@ def classical_error_exponent(
     """
     if n_background <= 0:
         return float("inf") if n_signal > 0 else 0.0
-    return n_modes * n_signal ** 2 / (4.0 * n_background)
+    return n_modes * n_signal**2 / (4.0 * n_background)
 
 
 def qi_snr_advantage_db(n_signal: float) -> float:

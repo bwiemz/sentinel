@@ -10,10 +10,12 @@ def polar_to_cartesian(range_m: float, azimuth_rad: float) -> np.ndarray:
 
     Convention: azimuth=0 is along +x axis, positive counter-clockwise.
     """
-    return np.array([
-        range_m * np.cos(azimuth_rad),
-        range_m * np.sin(azimuth_rad),
-    ])
+    return np.array(
+        [
+            range_m * np.cos(azimuth_rad),
+            range_m * np.sin(azimuth_rad),
+        ]
+    )
 
 
 def cartesian_to_polar(x: float, y: float) -> tuple[float, float]:
@@ -43,7 +45,9 @@ def normalize_angle(angle_rad: float) -> float:
 
 
 def polar_to_cartesian_3d(
-    range_m: float, azimuth_rad: float, elevation_rad: float,
+    range_m: float,
+    azimuth_rad: float,
+    elevation_rad: float,
 ) -> np.ndarray:
     """Convert (range, azimuth, elevation) to Cartesian [x, y, z].
 
@@ -52,11 +56,13 @@ def polar_to_cartesian_3d(
     - elevation=0 at horizon, positive upward
     """
     cos_el = np.cos(elevation_rad)
-    return np.array([
-        range_m * cos_el * np.cos(azimuth_rad),
-        range_m * cos_el * np.sin(azimuth_rad),
-        range_m * np.sin(elevation_rad),
-    ])
+    return np.array(
+        [
+            range_m * cos_el * np.cos(azimuth_rad),
+            range_m * cos_el * np.sin(azimuth_rad),
+            range_m * np.sin(elevation_rad),
+        ]
+    )
 
 
 def cartesian_to_polar_3d(x: float, y: float, z: float) -> tuple[float, float, float]:

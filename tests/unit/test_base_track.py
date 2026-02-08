@@ -1,7 +1,5 @@
 """Tests for TrackBase state machine and M-of-N confirmation."""
 
-import pytest
-
 from sentinel.core.types import TrackState
 from sentinel.tracking.base_track import TrackBase
 
@@ -59,7 +57,7 @@ class TestTrackBaseLifecycle:
         assert t.state == TrackState.CONFIRMED
         for i in range(4):
             t._record_miss()
-            assert t.state == TrackState.CONFIRMED, f"Should not coast after {i+1} misses"
+            assert t.state == TrackState.CONFIRMED, f"Should not coast after {i + 1} misses"
         t._record_miss()  # 5th miss
         assert t.state == TrackState.COASTING
 
@@ -132,30 +130,30 @@ class TestMofNConfirmation:
         t = TrackBase(confirm_hits=3, confirm_window=5)
         # Initial hit counted in window (1 hit)
         t._record_miss()  # 1 hit, 1 miss
-        t._record_hit()   # 2 hits, 1 miss
+        t._record_hit()  # 2 hits, 1 miss
         assert t.state == TrackState.TENTATIVE
-        t._record_hit()   # 3 hits, 1 miss -> confirm
+        t._record_hit()  # 3 hits, 1 miss -> confirm
         assert t.state == TrackState.CONFIRMED
 
     def test_m_of_n_with_gaps(self):
         """Hits with misses between them still confirm with M-of-N."""
         t = TrackBase(confirm_hits=3, confirm_window=5)
         # Window: [True (init)]
-        t._record_miss()   # [True, False]
-        t._record_hit()    # [True, False, True]
-        t._record_miss()   # [True, False, True, False]
-        t._record_hit()    # [True, False, True, False, True] = 3 hits -> confirm
+        t._record_miss()  # [True, False]
+        t._record_hit()  # [True, False, True]
+        t._record_miss()  # [True, False, True, False]
+        t._record_hit()  # [True, False, True, False, True] = 3 hits -> confirm
         assert t.state == TrackState.CONFIRMED
 
     def test_m_of_n_window_slides(self):
         """Old hits slide out of window, preventing confirmation."""
         t = TrackBase(confirm_hits=3, confirm_window=4)
         # Window: [True (init)]
-        t._record_hit()    # [True, True]
-        t._record_miss()   # [True, True, False]
-        t._record_miss()   # [True, True, False, False] = 2 hits -> not confirmed
+        t._record_hit()  # [True, True]
+        t._record_miss()  # [True, True, False]
+        t._record_miss()  # [True, True, False, False] = 2 hits -> not confirmed
         assert t.state == TrackState.TENTATIVE
-        t._record_miss()   # [True, False, False, False] = 1 hit (old True slid out)
+        t._record_miss()  # [True, False, False, False] = 1 hit (old True slid out)
         # Still tentative, but 3 consecutive misses -> DELETED
         assert t.state == TrackState.DELETED
 

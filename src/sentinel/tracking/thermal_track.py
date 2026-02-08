@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
-from sentinel.core.types import Detection, generate_track_id
+from sentinel.core.types import Detection
 from sentinel.tracking.base_track import TrackBase
 from sentinel.tracking.filters import BearingOnlyEKF
 from sentinel.utils.coords import azimuth_deg_to_rad, azimuth_rad_to_deg, polar_to_cartesian
@@ -23,11 +21,11 @@ class ThermalTrack(TrackBase):
         self,
         detection: Detection,
         assumed_range_m: float = 10000.0,
-        track_id: Optional[str] = None,
+        track_id: str | None = None,
         dt: float = 0.033,
         confirm_hits: int = 3,
         max_coast: int = 10,
-        confirm_window: Optional[int] = None,
+        confirm_window: int | None = None,
         tentative_delete_misses: int = 3,
         confirmed_coast_misses: int = 5,
         coast_reconfirm_hits: int = 2,
@@ -50,8 +48,8 @@ class ThermalTrack(TrackBase):
         self.ekf.x[2] = pos[1]
 
         # Sensor data
-        self.last_detection: Optional[Detection] = detection
-        self._last_temperature_k: Optional[float] = detection.temperature_k
+        self.last_detection: Detection | None = detection
+        self._last_temperature_k: float | None = detection.temperature_k
         self._range_fused = False  # True if range has been updated by radar fusion
 
     def predict(self) -> np.ndarray:
@@ -83,7 +81,7 @@ class ThermalTrack(TrackBase):
         return azimuth_rad_to_deg(np.arctan2(self.position[1], self.position[0]))
 
     @property
-    def temperature_k(self) -> Optional[float]:
+    def temperature_k(self) -> float | None:
         return self._last_temperature_k
 
     @property

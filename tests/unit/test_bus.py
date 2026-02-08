@@ -30,7 +30,10 @@ class TestEventBus:
     def test_unsubscribe(self):
         bus = EventBus()
         results = []
-        cb = lambda **kw: results.append(1)
+
+        def cb(**kw):
+            results.append(1)
+
         bus.subscribe("evt", cb)
         bus.publish("evt")
         bus.unsubscribe("evt", cb)

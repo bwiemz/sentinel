@@ -61,13 +61,16 @@ class TestCartesianToPolar:
 
 
 class TestRoundTrip:
-    @pytest.mark.parametrize("r,az", [
-        (100.0, 0.0),
-        (50.0, np.pi / 4),
-        (200.0, -np.pi / 3),
-        (1.0, np.pi / 2),
-        (5000.0, -0.1),
-    ])
+    @pytest.mark.parametrize(
+        "r,az",
+        [
+            (100.0, 0.0),
+            (50.0, np.pi / 4),
+            (200.0, -np.pi / 3),
+            (1.0, np.pi / 2),
+            (5000.0, -0.1),
+        ],
+    )
     def test_polar_cartesian_roundtrip(self, r, az):
         xy = polar_to_cartesian(r, az)
         r2, az2 = cartesian_to_polar(xy[0], xy[1])

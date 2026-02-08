@@ -5,7 +5,6 @@ import pytest
 
 from sentinel.core.types import RadarBand, SensorType, TargetType
 from sentinel.sensors.multifreq_radar_sim import (
-    BandNoiseConfig,
     MultiFreqRadarConfig,
     MultiFreqRadarSimulator,
     multifreq_radar_frame_to_detections,
@@ -247,9 +246,12 @@ class TestMultiFreqFrameToDetections:
 
     def test_empty_frame(self):
         from sentinel.sensors.frame import SensorFrame
+
         frame = SensorFrame(
-            data=[], timestamp=0.0,
-            sensor_type=SensorType.RADAR, metadata={},
+            data=[],
+            timestamp=0.0,
+            sensor_type=SensorType.RADAR,
+            metadata={},
         )
         dets = multifreq_radar_frame_to_detections(frame)
         assert dets == []

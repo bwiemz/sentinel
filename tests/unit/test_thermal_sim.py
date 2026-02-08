@@ -243,9 +243,12 @@ class TestThermalFrameToDetections:
 
     def test_empty_frame(self):
         from sentinel.sensors.frame import SensorFrame
+
         frame = SensorFrame(
-            data=[], timestamp=0.0,
-            sensor_type=SensorType.THERMAL, metadata={},
+            data=[],
+            timestamp=0.0,
+            sensor_type=SensorType.THERMAL,
+            metadata={},
         )
         dets = thermal_frame_to_detections(frame)
         assert dets == []

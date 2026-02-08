@@ -19,8 +19,14 @@ class SentinelConfig:
         self._config_path = Path(config_path)
         self._config: DictConfig | None = None
 
-    def load(self) -> DictConfig:
-        """Load base config and merge any component-level overrides."""
+    def load(self, validate: bool = False) -> DictConfig:
+        """Load base config and merge any component-level overrides.
+
+        Args:
+            validate: If True, validate the loaded config against the
+                Pydantic schema and raise ``pydantic.ValidationError``
+                on invalid values.
+        """
         if not self._config_path.exists():
             raise FileNotFoundError(f"Config not found: {self._config_path}")
 
@@ -35,6 +41,12 @@ class SentinelConfig:
                 for yaml_file in sorted(sub_path.glob("*.yaml")):
                     override = OmegaConf.load(yaml_file)
                     base = OmegaConf.merge(base, override)
+
+        # Optional Pydantic validation
+        if validate or OmegaConf.select(base, "sentinel.system.validate_config", default=False):
+            from sentinel.core.config_schema import validate_config
+
+            validate_config(OmegaConf.to_container(base, resolve=True))
 
         self._config = base
         return self._config

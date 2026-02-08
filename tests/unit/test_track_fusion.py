@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from sentinel.core.types import Detection, SensorType, TrackState
+from sentinel.core.types import Detection, SensorType
 from sentinel.fusion.track_fusion import FusedTrack, TrackFusion
 from sentinel.tracking.radar_track import RadarTrack
 from sentinel.tracking.track import Track
@@ -127,7 +127,7 @@ class TestTrackFusion:
         """Two camera + two radar with matching azimuths."""
         fusion = TrackFusion(camera_hfov_deg=60.0, image_width_px=1280, azimuth_gate_deg=5.0)
         # Camera at left third (az~-20) and center (az~0)
-        cam_left = _make_cam_track(213, 360)   # ~-20 degrees
+        cam_left = _make_cam_track(213, 360)  # ~-20 degrees
         cam_center = _make_cam_track(640, 360)  # ~0 degrees
         rdr_left = _make_radar_track(5000, -20.0)
         rdr_center = _make_radar_track(3000, 0.0)

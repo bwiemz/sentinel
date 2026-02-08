@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 import cv2
-import numpy as np
 from omegaconf import DictConfig
 
 from sentinel.core.types import TrackState
 
 # BGR color type
-Color = Tuple[int, int, int]
+Color = tuple[int, int, int]
 
 
 @dataclass
@@ -20,26 +18,26 @@ class HUDStyles:
     """Military HUD visual styling configuration."""
 
     # Colors (BGR format for OpenCV)
-    color_tentative: Color = (0, 255, 255)    # Yellow
-    color_confirmed: Color = (0, 255, 0)      # Green
-    color_coasting: Color = (0, 165, 255)     # Orange
-    color_reticle: Color = (0, 255, 0)        # Green
-    color_text: Color = (0, 255, 0)           # Green
-    color_text_dim: Color = (0, 140, 0)       # Dim green
-    color_border: Color = (0, 100, 0)         # Dark green
-    color_danger: Color = (0, 0, 255)         # Red
-    color_background: Color = (0, 20, 0)      # Dark green tint
-    color_panel_bg: Color = (0, 15, 0)        # Panel background
-    color_radar: Color = (255, 200, 0)       # Cyan for radar tracks
-    color_fused: Color = (255, 255, 0)       # Bright cyan for fused
-    color_thermal: Color = (0, 100, 255)     # Orange-red for thermal
-    color_stealth: Color = (200, 0, 200)     # Magenta for stealth
-    color_hypersonic: Color = (0, 0, 255)    # Red for hypersonic
-    color_quantum: Color = (255, 100, 200)    # Pink-cyan for quantum radar
+    color_tentative: Color = (0, 255, 255)  # Yellow
+    color_confirmed: Color = (0, 255, 0)  # Green
+    color_coasting: Color = (0, 165, 255)  # Orange
+    color_reticle: Color = (0, 255, 0)  # Green
+    color_text: Color = (0, 255, 0)  # Green
+    color_text_dim: Color = (0, 140, 0)  # Dim green
+    color_border: Color = (0, 100, 0)  # Dark green
+    color_danger: Color = (0, 0, 255)  # Red
+    color_background: Color = (0, 20, 0)  # Dark green tint
+    color_panel_bg: Color = (0, 15, 0)  # Panel background
+    color_radar: Color = (255, 200, 0)  # Cyan for radar tracks
+    color_fused: Color = (255, 255, 0)  # Bright cyan for fused
+    color_thermal: Color = (0, 100, 255)  # Orange-red for thermal
+    color_stealth: Color = (200, 0, 200)  # Magenta for stealth
+    color_hypersonic: Color = (0, 0, 255)  # Red for hypersonic
+    color_quantum: Color = (255, 100, 200)  # Pink-cyan for quantum radar
     color_threat_critical: Color = (0, 0, 255)  # Bright red
     color_threat_high: Color = (0, 80, 255)  # Orange-red
     color_threat_medium: Color = (0, 200, 255)  # Yellow
-    color_threat_low: Color = (0, 200, 0)    # Green
+    color_threat_low: Color = (0, 200, 0)  # Green
 
     # Font
     font_face: int = cv2.FONT_HERSHEY_SIMPLEX

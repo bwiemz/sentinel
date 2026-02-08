@@ -44,7 +44,7 @@ class ThermalAssociator:
         unmatched_tracks = set(range(len(tracks)))
         unmatched_dets = set(range(len(detections)))
 
-        for r, c in zip(row_idx, col_idx):
+        for r, c in zip(row_idx, col_idx, strict=False):
             if cost[r, c] < _INFEASIBLE:
                 matched.append((r, c))
                 unmatched_tracks.discard(r)

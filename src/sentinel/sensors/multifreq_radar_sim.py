@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
@@ -16,7 +15,6 @@ from sentinel.core.clock import SystemClock
 from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
-from sentinel.sensors.physics import RCSProfile, plasma_detection_factor
 from sentinel.sensors.radar_sim import MultiFreqRadarTarget
 from sentinel.utils.coords import (
     azimuth_deg_to_rad,
@@ -94,15 +92,17 @@ class MultiFreqRadarConfig:
         scenario = cfg.get("scenario", {})
         for t in scenario.get("targets", []):
             tt_str = t.get("target_type", "conventional")
-            targets.append(MultiFreqRadarTarget(
-                target_id=t.get("id", "TGT"),
-                position=np.array(t.get("position", [0, 0]), dtype=float),
-                velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
-                rcs_dbsm=t.get("rcs_dbsm", 10.0),
-                class_name=t.get("class_name", "unknown"),
-                target_type=TargetType(tt_str),
-                mach=t.get("mach", 0.0),
-            ))
+            targets.append(
+                MultiFreqRadarTarget(
+                    target_id=t.get("id", "TGT"),
+                    position=np.array(t.get("position", [0, 0]), dtype=float),
+                    velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
+                    rcs_dbsm=t.get("rcs_dbsm", 10.0),
+                    class_name=t.get("class_name", "unknown"),
+                    target_type=TargetType(tt_str),
+                    mach=t.get("mach", 0.0),
+                )
+            )
 
         noise = cfg.get("noise", {})
         return cls(
@@ -128,7 +128,7 @@ class MultiFreqRadarSimulator(AbstractSensor):
     range_m, azimuth_deg, velocity_mps, rcs_dbsm, frequency_band, target_id
     """
 
-    def __init__(self, config: MultiFreqRadarConfig, seed: Optional[int] = None):
+    def __init__(self, config: MultiFreqRadarConfig, seed: int | None = None):
         self._config = config
         self._rng = np.random.RandomState(seed)
         self._clock = SystemClock()
@@ -144,7 +144,9 @@ class MultiFreqRadarSimulator(AbstractSensor):
         bands_str = ", ".join(b.value for b in self._config.bands)
         logger.info(
             "Multi-freq radar connected: %d targets, bands=[%s], %.0f Hz",
-            len(self._config.targets), bands_str, self._config.scan_rate_hz,
+            len(self._config.targets),
+            bands_str,
+            self._config.scan_rate_hz,
         )
         return True
 
@@ -156,7 +158,7 @@ class MultiFreqRadarSimulator(AbstractSensor):
     def is_connected(self) -> bool:
         return self._connected
 
-    def read_frame(self) -> Optional[SensorFrame]:
+    def read_frame(self) -> SensorFrame | None:
         """Generate one multi-band radar scan."""
         if not self._connected:
             return None
@@ -195,16 +197,15 @@ class MultiFreqRadarSimulator(AbstractSensor):
 
             # Frequency-dependent detection probability
             pd = target.detection_probability_at_band(
-                band, self._config.base_detection_probability, t,
+                band,
+                self._config.base_detection_probability,
+                t,
             )
             if self._rng.rand() > pd:
                 continue
 
             # Range-dependent noise scaling
-            if self._config.range_dependent_noise:
-                range_factor = 1.0 + (r / self._config.max_range_m) ** 2
-            else:
-                range_factor = 1.0
+            range_factor = 1.0 + (r / self._config.max_range_m) ** 2 if self._config.range_dependent_noise else 1.0
 
             # Add band-specific noise (scaled by range factor)
             noisy_range = max(0.0, r + self._rng.randn() * noise_cfg.noise_range_m * range_factor)
@@ -214,21 +215,25 @@ class MultiFreqRadarSimulator(AbstractSensor):
             effective_rcs = target.rcs_at_band(band)
             noisy_rcs = effective_rcs + self._rng.randn() * noise_cfg.noise_rcs_dbsm
 
-            detections.append({
-                "range_m": noisy_range,
-                "azimuth_deg": noisy_az_deg,
-                "velocity_mps": noisy_vel,
-                "rcs_dbsm": noisy_rcs,
-                "frequency_band": band.value,
-                "target_id": target.target_id,
-            })
+            detections.append(
+                {
+                    "range_m": noisy_range,
+                    "azimuth_deg": noisy_az_deg,
+                    "velocity_mps": noisy_vel,
+                    "rcs_dbsm": noisy_rcs,
+                    "frequency_band": band.value,
+                    "target_id": target.target_id,
+                }
+            )
 
         # False alarms for this band
         detections.extend(self._generate_false_alarms(band))
         return detections
 
     def _compute_radial_velocity(
-        self, position: np.ndarray, velocity: np.ndarray,
+        self,
+        position: np.ndarray,
+        velocity: np.ndarray,
     ) -> float:
         r = np.linalg.norm(position)
         if r < 1e-6:
@@ -240,13 +245,15 @@ class MultiFreqRadarSimulator(AbstractSensor):
         alarms = []
         fov_half_deg = self._config.fov_deg / 2
         for _ in range(n_fa):
-            alarms.append({
-                "range_m": self._rng.uniform(10.0, self._config.max_range_m),
-                "azimuth_deg": self._rng.uniform(-fov_half_deg, fov_half_deg),
-                "velocity_mps": self._rng.randn() * 5.0,
-                "rcs_dbsm": self._rng.uniform(-10, 20),
-                "frequency_band": band.value,
-            })
+            alarms.append(
+                {
+                    "range_m": self._rng.uniform(10.0, self._config.max_range_m),
+                    "azimuth_deg": self._rng.uniform(-fov_half_deg, fov_half_deg),
+                    "velocity_mps": self._rng.randn() * 5.0,
+                    "rcs_dbsm": self._rng.uniform(-10, 20),
+                    "frequency_band": band.value,
+                }
+            )
         return alarms
 
 
@@ -256,14 +263,16 @@ def multifreq_radar_frame_to_detections(frame: SensorFrame) -> list[Detection]:
     for d in frame.data:
         az_rad = azimuth_deg_to_rad(d["azimuth_deg"])
         pos = polar_to_cartesian(d["range_m"], az_rad)
-        detections.append(Detection(
-            sensor_type=SensorType.RADAR,
-            timestamp=frame.timestamp,
-            range_m=d["range_m"],
-            azimuth_deg=d["azimuth_deg"],
-            velocity_mps=d["velocity_mps"],
-            rcs_dbsm=d["rcs_dbsm"],
-            radar_band=d.get("frequency_band"),
-            position_3d=np.array([pos[0], pos[1], 0.0]),
-        ))
+        detections.append(
+            Detection(
+                sensor_type=SensorType.RADAR,
+                timestamp=frame.timestamp,
+                range_m=d["range_m"],
+                azimuth_deg=d["azimuth_deg"],
+                velocity_mps=d["velocity_mps"],
+                rcs_dbsm=d["rcs_dbsm"],
+                radar_band=d.get("frequency_band"),
+                position_3d=np.array([pos[0], pos[1], 0.0]),
+            )
+        )
     return detections

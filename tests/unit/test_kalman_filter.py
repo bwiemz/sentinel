@@ -1,7 +1,6 @@
 """Tests for Kalman filter implementation."""
 
 import numpy as np
-import pytest
 
 from sentinel.tracking.filters import KalmanFilter
 

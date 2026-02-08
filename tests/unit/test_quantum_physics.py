@@ -2,8 +2,6 @@
 
 import math
 
-import pytest
-
 from sentinel.sensors.physics import (
     ReceiverType,
     channel_transmissivity,
@@ -137,7 +135,7 @@ class TestClassicalErrorExponent:
     def test_basic(self):
         # beta_C = M * N_S^2 / (4 * N_B)
         beta = classical_error_exponent(0.01, 600.0, 10000)
-        expected = 10000 * 0.01 ** 2 / (4.0 * 600.0)
+        expected = 10000 * 0.01**2 / (4.0 * 600.0)
         assert abs(beta - expected) < 1e-12
 
     def test_always_less_than_qi(self):

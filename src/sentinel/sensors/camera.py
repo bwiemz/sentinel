@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import platform
 import logging
-from pathlib import Path
-from typing import Optional
+import platform
 
 import cv2
-import numpy as np
 
 from sentinel.core.clock import SystemClock
 from sentinel.core.types import SensorType
@@ -45,7 +42,7 @@ class CameraAdapter(AbstractSensor):
         self._fps = fps
         self._buffer_size = buffer_size
         self._backend = backend
-        self._cap: Optional[cv2.VideoCapture] = None
+        self._cap: cv2.VideoCapture | None = None
         self._clock = SystemClock()
         self._frame_count = 0
         self._is_file = isinstance(source, str) and not source.startswith("rtsp")
@@ -75,7 +72,10 @@ class CameraAdapter(AbstractSensor):
         actual_fps = self._cap.get(cv2.CAP_PROP_FPS)
         logger.info(
             "Camera connected: %s @ %dx%d %.1f FPS",
-            self._source, actual_w, actual_h, actual_fps,
+            self._source,
+            actual_w,
+            actual_h,
+            actual_fps,
         )
         return True
 
@@ -86,7 +86,7 @@ class CameraAdapter(AbstractSensor):
             self._cap = None
             logger.info("Camera disconnected: %s", self._source)
 
-    def read_frame(self) -> Optional[SensorFrame]:
+    def read_frame(self) -> SensorFrame | None:
         """Grab and decode one frame."""
         if self._cap is None or not self._cap.isOpened():
             return None
@@ -118,14 +118,14 @@ class CameraAdapter(AbstractSensor):
         return self._frame_count
 
     @property
-    def total_frames(self) -> Optional[int]:
+    def total_frames(self) -> int | None:
         """Total frame count for video files, None for live sources."""
         if self._cap is None or not self._is_file:
             return None
         total = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
         return total if total > 0 else None
 
-    def _resolve_backend(self) -> Optional[int]:
+    def _resolve_backend(self) -> int | None:
         if self._backend == "auto":
             if isinstance(self._source, int) and platform.system() == "Windows":
                 return cv2.CAP_DSHOW

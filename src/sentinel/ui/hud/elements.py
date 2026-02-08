@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import time
-from typing import Optional
 
 import cv2
 import numpy as np
@@ -101,18 +100,33 @@ class HUDElements:
         # Label background
         (tw, th), _ = cv2.getTextSize(label, self.s.font_face, self.s.font_scale, 1)
         cv2.rectangle(
-            frame, (x1, y1 - th * 2 - 12), (x1 + tw + 6, y1 - 2),
-            self.s.color_panel_bg, -1,
+            frame,
+            (x1, y1 - th * 2 - 12),
+            (x1 + tw + 6, y1 - 2),
+            self.s.color_panel_bg,
+            -1,
         )
 
         # Text
         cv2.putText(
-            frame, label, (x1 + 3, y1 - th - 6),
-            self.s.font_face, self.s.font_scale, color, 1, cv2.LINE_AA,
+            frame,
+            label,
+            (x1 + 3, y1 - th - 6),
+            self.s.font_face,
+            self.s.font_scale,
+            color,
+            1,
+            cv2.LINE_AA,
         )
         cv2.putText(
-            frame, sublabel, (x1 + 3, y1 - 4),
-            self.s.font_face, self.s.font_scale_small, self.s.color_text_dim, 1, cv2.LINE_AA,
+            frame,
+            sublabel,
+            (x1 + 3, y1 - 4),
+            self.s.font_face,
+            self.s.font_scale_small,
+            self.s.color_text_dim,
+            1,
+            cv2.LINE_AA,
         )
 
     # === VELOCITY VECTOR ===
@@ -124,7 +138,7 @@ class HUDElements:
 
         cx, cy = int(track.position[0]), int(track.position[1])
         vx, vy = track.velocity
-        speed = np.sqrt(vx ** 2 + vy ** 2)
+        speed = np.sqrt(vx**2 + vy**2)
 
         if speed < 0.5:  # Below threshold, skip
             return
@@ -164,8 +178,14 @@ class HUDElements:
         ]
         for text in items:
             cv2.putText(
-                frame, text, (10, y),
-                self.s.font_face, self.s.font_scale_small, self.s.color_text, 1, cv2.LINE_AA,
+                frame,
+                text,
+                (10, y),
+                self.s.font_face,
+                self.s.font_scale_small,
+                self.s.color_text,
+                1,
+                cv2.LINE_AA,
             )
             y += line_h
 
@@ -189,8 +209,14 @@ class HUDElements:
 
         # Header
         cv2.putText(
-            frame, "ACTIVE TRACKS", (10, y_start + 14),
-            self.s.font_face, self.s.font_scale_small, self.s.color_text, 1, cv2.LINE_AA,
+            frame,
+            "ACTIVE TRACKS",
+            (10, y_start + 14),
+            self.s.font_face,
+            self.s.font_scale_small,
+            self.s.color_text,
+            1,
+            cv2.LINE_AA,
         )
 
         # Track entries
@@ -199,8 +225,14 @@ class HUDElements:
             cls = track.dominant_class or "UNK"
             text = f"{track.track_id} | {cls:8s} | SCR:{track.score:.2f}"
             cv2.putText(
-                frame, text, (10, y),
-                self.s.font_face, self.s.font_scale_small, self.s.color_text_dim, 1, cv2.LINE_AA,
+                frame,
+                text,
+                (10, y),
+                self.s.font_face,
+                self.s.font_scale_small,
+                self.s.color_text_dim,
+                1,
+                cv2.LINE_AA,
             )
             y += line_h
 
@@ -213,16 +245,28 @@ class HUDElements:
         cv2.line(frame, (0, 26), (w, 26), self.s.color_border, 1)
 
         cv2.putText(
-            frame, title, (8, 18),
-            self.s.font_face, self.s.font_scale_large, self.s.color_text, 1, cv2.LINE_AA,
+            frame,
+            title,
+            (8, 18),
+            self.s.font_face,
+            self.s.font_scale_large,
+            self.s.color_text,
+            1,
+            cv2.LINE_AA,
         )
 
         # Timestamp (right side)
         ts = time.strftime("%H:%M:%S", time.localtime())
         (tw, _), _ = cv2.getTextSize(ts, self.s.font_face, self.s.font_scale, 1)
         cv2.putText(
-            frame, ts, (w - tw - 10, 18),
-            self.s.font_face, self.s.font_scale, self.s.color_text_dim, 1, cv2.LINE_AA,
+            frame,
+            ts,
+            (w - tw - 10, 18),
+            self.s.font_face,
+            self.s.font_scale,
+            self.s.color_text_dim,
+            1,
+            cv2.LINE_AA,
         )
 
     def draw_border_frame(self, frame: np.ndarray) -> None:
@@ -278,12 +322,15 @@ class HUDElements:
         size = 8
 
         # Diamond shape
-        pts = np.array([
-            [px_x, py - size],
-            [px_x + size, py],
-            [px_x, py + size],
-            [px_x - size, py],
-        ], np.int32)
+        pts = np.array(
+            [
+                [px_x, py - size],
+                [px_x + size, py],
+                [px_x, py + size],
+                [px_x - size, py],
+            ],
+            np.int32,
+        )
         cv2.polylines(frame, [pts], True, color, 1, cv2.LINE_AA)
 
         if is_fused:
@@ -292,12 +339,24 @@ class HUDElements:
         # Label
         label = f"R:{range_m / 1000:.1f}km"
         cv2.putText(
-            frame, label, (px_x + 12, py + 4),
-            self.s.font_face, self.s.font_scale_small, color, 1, cv2.LINE_AA,
+            frame,
+            label,
+            (px_x + 12, py + 4),
+            self.s.font_face,
+            self.s.font_scale_small,
+            color,
+            1,
+            cv2.LINE_AA,
         )
         cv2.putText(
-            frame, track_id, (px_x + 12, py - 8),
-            self.s.font_face, self.s.font_scale_small, color, 1, cv2.LINE_AA,
+            frame,
+            track_id,
+            (px_x + 12, py - 8),
+            self.s.font_face,
+            self.s.font_scale_small,
+            color,
+            1,
+            cv2.LINE_AA,
         )
 
     def draw_radar_status_line(self, frame: np.ndarray, status: dict) -> None:
@@ -306,14 +365,26 @@ class HUDElements:
             return
         text = f"RDR: {status.get('radar_track_count', 0)} TRK | {status.get('radar_detection_count', 0)} DET"
         cv2.putText(
-            frame, text, (10, 126),
-            self.s.font_face, self.s.font_scale_small, self.s.color_radar, 1, cv2.LINE_AA,
+            frame,
+            text,
+            (10, 126),
+            self.s.font_face,
+            self.s.font_scale_small,
+            self.s.color_radar,
+            1,
+            cv2.LINE_AA,
         )
         fused = status.get("fused_track_count", 0)
         if fused > 0:
             cv2.putText(
-                frame, f"FUSED: {fused}", (10, 142),
-                self.s.font_face, self.s.font_scale_small, self.s.color_fused, 1, cv2.LINE_AA,
+                frame,
+                f"FUSED: {fused}",
+                (10, 142),
+                self.s.font_face,
+                self.s.font_scale_small,
+                self.s.color_fused,
+                1,
+                cv2.LINE_AA,
             )
 
     def draw_fusion_indicator(self, frame: np.ndarray, track: Track) -> None:
@@ -323,8 +394,14 @@ class HUDElements:
             return
         x2, y1 = int(bbox[2]), int(bbox[1])
         cv2.putText(
-            frame, "F", (x2 + 4, y1 + 12),
-            self.s.font_face, self.s.font_scale, self.s.color_fused, 1, cv2.LINE_AA,
+            frame,
+            "F",
+            (x2 + 4, y1 + 12),
+            self.s.font_face,
+            self.s.font_scale,
+            self.s.color_fused,
+            1,
+            cv2.LINE_AA,
         )
 
     # === THERMAL ELEMENTS ===
@@ -352,11 +429,14 @@ class HUDElements:
         size = 7
 
         # Triangle shape (pointing up)
-        pts = np.array([
-            [px_x, py - size],
-            [px_x + size, py + size],
-            [px_x - size, py + size],
-        ], np.int32)
+        pts = np.array(
+            [
+                [px_x, py - size],
+                [px_x + size, py + size],
+                [px_x - size, py + size],
+            ],
+            np.int32,
+        )
         cv2.polylines(frame, [pts], True, color, 1, cv2.LINE_AA)
         if is_fused:
             cv2.fillPoly(frame, [pts], color)
@@ -364,8 +444,14 @@ class HUDElements:
         # Temperature label
         label = f"{temperature_k:.0f}K"
         cv2.putText(
-            frame, label, (px_x + 10, py + 4),
-            self.s.font_face, self.s.font_scale_small, color, 1, cv2.LINE_AA,
+            frame,
+            label,
+            (px_x + 10, py + 4),
+            self.s.font_face,
+            self.s.font_scale_small,
+            color,
+            1,
+            cv2.LINE_AA,
         )
 
     def draw_threat_indicator(
@@ -402,8 +488,14 @@ class HUDElements:
         (tw, th), _ = cv2.getTextSize(label, self.s.font_face, self.s.font_scale_small, 1)
         cv2.rectangle(frame, (px_x - 1, py - th - 2), (px_x + tw + 2, py + 2), self.s.color_panel_bg, -1)
         cv2.putText(
-            frame, label, (px_x, py),
-            self.s.font_face, self.s.font_scale_small, color, 1, cv2.LINE_AA,
+            frame,
+            label,
+            (px_x, py),
+            self.s.font_face,
+            self.s.font_scale_small,
+            color,
+            1,
+            cv2.LINE_AA,
         )
 
     def draw_stealth_alert(self, frame: np.ndarray) -> None:
@@ -422,8 +514,14 @@ class HUDElements:
         cv2.addWeighted(overlay, bg_alpha, frame, 1 - bg_alpha, 0, frame)
 
         cv2.putText(
-            frame, label, (cx, cy),
-            self.s.font_face, self.s.font_scale_large, (255, 255, 255), 1, cv2.LINE_AA,
+            frame,
+            label,
+            (cx, cy),
+            self.s.font_face,
+            self.s.font_scale_large,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
         )
 
     def draw_hypersonic_alert(self, frame: np.ndarray) -> None:
@@ -441,8 +539,14 @@ class HUDElements:
         cv2.addWeighted(overlay, bg_alpha, frame, 1 - bg_alpha, 0, frame)
 
         cv2.putText(
-            frame, label, (cx, cy),
-            self.s.font_face, self.s.font_scale_large, (255, 255, 255), 1, cv2.LINE_AA,
+            frame,
+            label,
+            (cx, cy),
+            self.s.font_face,
+            self.s.font_scale_large,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
         )
 
     def draw_thermal_status_line(self, frame: np.ndarray, status: dict) -> None:
@@ -452,8 +556,14 @@ class HUDElements:
         y = 158 if status.get("radar_connected", False) else 126
         text = f"THM: {status.get('thermal_track_count', 0)} TRK"
         cv2.putText(
-            frame, text, (10, y),
-            self.s.font_face, self.s.font_scale_small, self.s.color_thermal, 1, cv2.LINE_AA,
+            frame,
+            text,
+            (10, y),
+            self.s.font_face,
+            self.s.font_scale_small,
+            self.s.color_thermal,
+            1,
+            cv2.LINE_AA,
         )
         # Threat counts
         threats = status.get("threat_counts", {})
@@ -465,8 +575,14 @@ class HUDElements:
                     parts.append(f"{level[0]}:{count}")
             if parts:
                 cv2.putText(
-                    frame, "THR:" + " ".join(parts), (10, y + 14),
-                    self.s.font_face, self.s.font_scale_small, self.s.color_threat_high, 1, cv2.LINE_AA,
+                    frame,
+                    "THR:" + " ".join(parts),
+                    (10, y + 14),
+                    self.s.font_face,
+                    self.s.font_scale_small,
+                    self.s.color_threat_high,
+                    1,
+                    cv2.LINE_AA,
                 )
 
     def draw_quantum_status_line(self, frame: np.ndarray, status: dict) -> None:
@@ -481,6 +597,12 @@ class HUDElements:
             y += 28
         text = f"QI: {status.get('quantum_radar_track_count', 0)} TRK"
         cv2.putText(
-            frame, text, (10, y),
-            self.s.font_face, self.s.font_scale_small, self.s.color_quantum, 1, cv2.LINE_AA,
+            frame,
+            text,
+            (10, y),
+            self.s.font_face,
+            self.s.font_scale_small,
+            self.s.color_quantum,
+            1,
+            cv2.LINE_AA,
         )

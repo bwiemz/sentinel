@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
@@ -29,19 +28,19 @@ class FusedTrack:
     """A fused track combining camera and radar information."""
 
     fused_id: str
-    camera_track: Optional[Track] = None
-    radar_track: Optional[RadarTrack] = None
-    position_px: Optional[np.ndarray] = None
-    position_m: Optional[np.ndarray] = None
-    range_m: Optional[float] = None
-    azimuth_deg: Optional[float] = None
-    velocity_mps: Optional[float] = None
-    class_name: Optional[str] = None
-    confidence: Optional[float] = None
+    camera_track: Track | None = None
+    radar_track: RadarTrack | None = None
+    position_px: np.ndarray | None = None
+    position_m: np.ndarray | None = None
+    range_m: float | None = None
+    azimuth_deg: float | None = None
+    velocity_mps: float | None = None
+    class_name: str | None = None
+    confidence: float | None = None
     sensor_sources: set[SensorType] = field(default_factory=set)
     fusion_quality: float = 0.0
-    fused_state: Optional[np.ndarray] = None
-    fused_covariance: Optional[np.ndarray] = None
+    fused_state: np.ndarray | None = None
+    fused_covariance: np.ndarray | None = None
 
     @property
     def is_dual_sensor(self) -> bool:
@@ -117,7 +116,7 @@ class TrackFusion:
             matched_cam: set[int] = set()
             matched_rdr: set[int] = set()
 
-            for r, c in zip(row_indices, col_indices):
+            for r, c in zip(row_indices, col_indices, strict=False):
                 if cost[r, c] < _INFEASIBLE:
                     fused.append(self._make_dual(camera_tracks[r], radar_tracks[c]))
                     matched_cam.add(r)
@@ -206,7 +205,9 @@ class TrackFusion:
         )
 
     def _ci_fuse_states(
-        self, cam: Track, rdr: RadarTrack,
+        self,
+        cam: Track,
+        rdr: RadarTrack,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Fuse camera and radar states via Covariance Intersection.
 
@@ -220,23 +221,27 @@ class TrackFusion:
         # Approximate: camera bearing -> world position at radar range
         cam_az_deg = self.pixel_to_azimuth(cam_pos[0])
         cam_az_rad = np.radians(cam_az_deg)
-        cam_world = np.array([
-            rdr.range_m * np.cos(cam_az_rad),
-            rdr.range_m * np.sin(cam_az_rad),
-        ])
+        cam_world = np.array(
+            [
+                rdr.range_m * np.cos(cam_az_rad),
+                rdr.range_m * np.sin(cam_az_rad),
+            ]
+        )
 
         # Camera covariance in world frame (large -- pixel-based uncertainty)
         # Scale pixel covariance to world: rough projection
         pixel_to_meter = rdr.range_m * np.radians(self._hfov_deg) / self._img_width
-        cam_P_world = np.eye(2) * (pixel_to_meter ** 2) * cam.kf.P[0, 0]
+        cam_P_world = np.eye(2) * (pixel_to_meter**2) * cam.kf.P[0, 0]
 
         # Radar position and 2D position covariance
         rdr_pos = rdr.position[:2]  # [x, y] in meters
         # Extract 2x2 position covariance from 4x4 state covariance
-        rdr_P = np.array([
-            [rdr.ekf.P[0, 0], rdr.ekf.P[0, 2]],
-            [rdr.ekf.P[2, 0], rdr.ekf.P[2, 2]],
-        ])
+        rdr_P = np.array(
+            [
+                [rdr.ekf.P[0, 0], rdr.ekf.P[0, 2]],
+                [rdr.ekf.P[2, 0], rdr.ekf.P[2, 2]],
+            ]
+        )
 
         return covariance_intersection(cam_world, cam_P_world, rdr_pos, rdr_P)
 

@@ -3,6 +3,11 @@ sentinel:
     name: "SENTINEL"
     version: "0.1.0"
     log_level: "INFO"
+    graceful_degradation: true    # isolate sensor failures, don't crash pipeline
+    max_sensor_errors: 10         # consecutive errors before auto-disabling a sensor
+    validate_config: false        # Pydantic schema validation on startup
+    log_file: null                # path to log file (null = console only)
+    log_json: false               # JSON log output instead of human-readable
 
   sensors:
     camera:

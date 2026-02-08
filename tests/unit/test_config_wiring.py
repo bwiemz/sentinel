@@ -5,12 +5,10 @@ import pytest
 from omegaconf import OmegaConf
 
 from sentinel.core.types import Detection, SensorType
+from sentinel.tracking.radar_track_manager import RadarTrackManager
+from sentinel.tracking.thermal_track_manager import ThermalTrackManager
 from sentinel.tracking.track import Track
 from sentinel.tracking.track_manager import TrackManager
-from sentinel.tracking.radar_track import RadarTrack
-from sentinel.tracking.radar_track_manager import RadarTrackManager
-from sentinel.tracking.thermal_track import ThermalTrack
-from sentinel.tracking.thermal_track_manager import ThermalTrackManager
 
 
 def _camera_det(x1=100, y1=100, x2=200, y2=200, cls="person"):
@@ -192,22 +190,24 @@ class TestThermalTrackManagerConfigWiring:
     """Test that ThermalTrackManager wires lifecycle thresholds."""
 
     def _make_config(self):
-        return OmegaConf.create({
-            "filter": {
-                "dt": 0.033,
-                "assumed_initial_range_m": 10000.0,
-            },
-            "association": {"gate_threshold": 6.635},
-            "track_management": {
-                "confirm_hits": 3,
-                "max_coast_frames": 10,
-                "max_tracks": 50,
-                "confirm_window": None,
-                "tentative_delete_misses": 3,
-                "confirmed_coast_misses": 5,
-                "coast_reconfirm_hits": 2,
-            },
-        })
+        return OmegaConf.create(
+            {
+                "filter": {
+                    "dt": 0.033,
+                    "assumed_initial_range_m": 10000.0,
+                },
+                "association": {"gate_threshold": 6.635},
+                "track_management": {
+                    "confirm_hits": 3,
+                    "max_coast_frames": 10,
+                    "max_tracks": 50,
+                    "confirm_window": None,
+                    "tentative_delete_misses": 3,
+                    "confirmed_coast_misses": 5,
+                    "coast_reconfirm_hits": 2,
+                },
+            }
+        )
 
     def test_lifecycle_wired(self):
         cfg = self._make_config()

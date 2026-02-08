@@ -29,6 +29,7 @@ INFEASIBLE = 1e5
 @dataclass
 class AssociationResult:
     """Result of data association."""
+
     matched_pairs: list[tuple[int, int]] = field(default_factory=list)  # (track_idx, det_idx)
     unmatched_tracks: list[int] = field(default_factory=list)
     unmatched_detections: list[int] = field(default_factory=list)
@@ -60,9 +61,7 @@ class HungarianAssociator:
         self._maha_weight = mahalanobis_weight
         self._cascaded = cascaded
 
-    def associate(
-        self, tracks: list[Track], detections: list[Detection]
-    ) -> AssociationResult:
+    def associate(self, tracks: list[Track], detections: list[Detection]) -> AssociationResult:
         """Perform optimal assignment between tracks and detections."""
         if not tracks or not detections:
             return AssociationResult(
@@ -118,9 +117,7 @@ class HungarianAssociator:
                 if pred_bbox is not None:
                     iou_cost = 1.0 - iou_bbox(pred_bbox, det.bbox)
 
-                cost[i, j] = (
-                    self._maha_weight * maha + self._iou_weight * iou_cost
-                )
+                cost[i, j] = self._maha_weight * maha + self._iou_weight * iou_cost
 
         row_idx, col_idx = linear_sum_assignment(cost)
 
@@ -128,7 +125,7 @@ class HungarianAssociator:
         unmatched_t = set(track_indices)
         unmatched_d = set(det_list)
 
-        for r, c in zip(row_idx, col_idx):
+        for r, c in zip(row_idx, col_idx, strict=False):
             if cost[r, c] < INFEASIBLE:
                 matched.append((track_indices[r], det_list[c]))
                 unmatched_t.discard(track_indices[r])
@@ -140,35 +137,23 @@ class HungarianAssociator:
             unmatched_detections=sorted(unmatched_d),
         )
 
-    def _cascaded_associate(
-        self, tracks: list[Track], detections: list[Detection]
-    ) -> AssociationResult:
+    def _cascaded_associate(self, tracks: list[Track], detections: list[Detection]) -> AssociationResult:
         """Two-pass: confirmed tracks first, then tentative/coasting."""
-        confirmed_idx = [
-            i for i, t in enumerate(tracks) if t.state == TrackState.CONFIRMED
-        ]
-        other_idx = [
-            i for i, t in enumerate(tracks) if t.state != TrackState.CONFIRMED
-        ]
+        confirmed_idx = [i for i, t in enumerate(tracks) if t.state == TrackState.CONFIRMED]
+        other_idx = [i for i, t in enumerate(tracks) if t.state != TrackState.CONFIRMED]
 
         result1 = self._single_pass(tracks, detections, confirmed_idx)
         remaining_dets = set(result1.unmatched_detections)
 
-        result2 = self._single_pass(
-            tracks, detections, other_idx, available_dets=remaining_dets
-        )
+        result2 = self._single_pass(tracks, detections, other_idx, available_dets=remaining_dets)
 
         return AssociationResult(
             matched_pairs=result1.matched_pairs + result2.matched_pairs,
-            unmatched_tracks=sorted(
-                set(result1.unmatched_tracks) | set(result2.unmatched_tracks)
-            ),
+            unmatched_tracks=sorted(set(result1.unmatched_tracks) | set(result2.unmatched_tracks)),
             unmatched_detections=sorted(set(result2.unmatched_detections)),
         )
 
-    def _build_cost_matrix(
-        self, tracks: list[Track], detections: list[Detection]
-    ) -> np.ndarray:
+    def _build_cost_matrix(self, tracks: list[Track], detections: list[Detection]) -> np.ndarray:
         """Build NxM cost matrix using weighted IoU + Mahalanobis distance."""
         N = len(tracks)
         M = len(detections)
@@ -195,8 +180,6 @@ class HungarianAssociator:
                     iou_cost = 1.0 - iou_bbox(pred_bbox, det.bbox)
 
                 # Combined cost
-                cost[i, j] = (
-                    self._maha_weight * maha + self._iou_weight * iou_cost
-                )
+                cost[i, j] = self._maha_weight * maha + self._iou_weight * iou_cost
 
         return cost

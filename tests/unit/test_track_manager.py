@@ -1,7 +1,6 @@
 """Tests for TrackManager."""
 
 import numpy as np
-import pytest
 from omegaconf import OmegaConf
 
 from sentinel.core.types import Detection, SensorType, TrackState
@@ -9,16 +8,18 @@ from sentinel.tracking.track_manager import TrackManager
 
 
 def _make_config():
-    return OmegaConf.create({
-        "filter": {"dt": 1 / 30, "type": "kf"},
-        "association": {"gate_threshold": 50.0, "method": "hungarian"},
-        "track_management": {
-            "confirm_hits": 3,
-            "confirm_window": 5,
-            "max_coast_frames": 10,
-            "max_tracks": 50,
-        },
-    })
+    return OmegaConf.create(
+        {
+            "filter": {"dt": 1 / 30, "type": "kf"},
+            "association": {"gate_threshold": 50.0, "method": "hungarian"},
+            "track_management": {
+                "confirm_hits": 3,
+                "confirm_window": 5,
+                "max_coast_frames": 10,
+                "max_tracks": 50,
+            },
+        }
+    )
 
 
 def _det(cx, cy, w=100, h=100, cls="person", conf=0.9):
@@ -56,7 +57,7 @@ class TestTrackManager:
     def test_track_confirmation(self):
         mgr = TrackManager(_make_config())
         for i in range(4):
-            tracks = mgr.step([_det(100 + i, 100)])
+            mgr.step([_det(100 + i, 100)])
         confirmed = mgr.confirmed_tracks
         assert len(confirmed) == 1
 

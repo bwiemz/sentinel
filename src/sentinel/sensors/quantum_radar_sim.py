@@ -13,9 +13,7 @@ RadarTrackManager EKF pipeline.
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
@@ -52,12 +50,12 @@ _C = 2.99792458e8
 class QuantumRadarConfig:
     """Configuration for the quantum illumination radar simulator."""
 
-    freq_hz: float = 10.0e9          # Operating frequency (10 GHz X-band)
-    squeeze_param_r: float = 0.1     # TMSV squeeze parameter (N_S ~ 0.01)
-    n_modes: int = 10000             # Signal-idler mode pairs per pulse
-    antenna_gain_dbi: float = 30.0   # Antenna gain in dBi
+    freq_hz: float = 10.0e9  # Operating frequency (10 GHz X-band)
+    squeeze_param_r: float = 0.1  # TMSV squeeze parameter (N_S ~ 0.01)
+    n_modes: int = 10000  # Signal-idler mode pairs per pulse
+    antenna_gain_dbi: float = 30.0  # Antenna gain in dBi
     receiver_type: ReceiverType = ReceiverType.OPA
-    ambient_temp_k: float = 290.0    # Background temperature
+    ambient_temp_k: float = 290.0  # Background temperature
 
     scan_rate_hz: float = 10.0
     max_range_m: float = 15000.0
@@ -117,15 +115,17 @@ class QuantumRadarConfig:
                 "stealth": TargetType.STEALTH,
                 "hypersonic": TargetType.HYPERSONIC,
             }
-            targets.append(MultiFreqRadarTarget(
-                target_id=t.get("id", "QI-TGT"),
-                position=np.array(t.get("position", [0, 0]), dtype=float),
-                velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
-                rcs_dbsm=t.get("rcs_dbsm", 10.0),
-                class_name=t.get("class_name", "unknown"),
-                target_type=tt_map.get(tt_str, TargetType.CONVENTIONAL),
-                mach=t.get("mach", 0.0),
-            ))
+            targets.append(
+                MultiFreqRadarTarget(
+                    target_id=t.get("id", "QI-TGT"),
+                    position=np.array(t.get("position", [0, 0]), dtype=float),
+                    velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
+                    rcs_dbsm=t.get("rcs_dbsm", 10.0),
+                    class_name=t.get("class_name", "unknown"),
+                    target_type=tt_map.get(tt_str, TargetType.CONVENTIONAL),
+                    mach=t.get("mach", 0.0),
+                )
+            )
 
         return cls(
             freq_hz=cfg.get("freq_hz", 10.0e9),
@@ -159,7 +159,7 @@ class QuantumRadarSimulator(AbstractSensor):
     fidelity), allowing reuse of the existing RadarTrackManager.
     """
 
-    def __init__(self, config: QuantumRadarConfig, seed: Optional[int] = None):
+    def __init__(self, config: QuantumRadarConfig, seed: int | None = None):
         self._config = config
         self._rng = np.random.RandomState(seed)
         self._clock = SystemClock()
@@ -176,9 +176,11 @@ class QuantumRadarSimulator(AbstractSensor):
         nb = self._config.n_background
         adv = qi_snr_advantage_db(ns)
         logger.info(
-            "Quantum radar connected: %d targets, N_S=%.4f, N_B=%.0f, "
-            "QI advantage=%.1f dB, receiver=%s",
-            len(self._config.targets), ns, nb, adv,
+            "Quantum radar connected: %d targets, N_S=%.4f, N_B=%.0f, QI advantage=%.1f dB, receiver=%s",
+            len(self._config.targets),
+            ns,
+            nb,
+            adv,
             self._config.receiver_type.value,
         )
         return True
@@ -187,7 +189,7 @@ class QuantumRadarSimulator(AbstractSensor):
         self._connected = False
         logger.info("Quantum radar disconnected after %d scans", self._scan_count)
 
-    def read_frame(self) -> Optional[SensorFrame]:
+    def read_frame(self) -> SensorFrame | None:
         """Generate one quantum radar scan."""
         if not self._connected:
             return None
@@ -197,7 +199,6 @@ class QuantumRadarSimulator(AbstractSensor):
 
         ns = self._config.n_signal
         nb = self._config.n_background
-        m = self._config.n_modes
         recv_eff = self._config.receiver_eff
 
         for target in self._config.targets:
@@ -247,35 +248,32 @@ class QuantumRadarSimulator(AbstractSensor):
                 continue
 
             # Range-dependent noise scaling
-            if self._config.range_dependent_noise:
-                range_factor = 1.0 + (r / self._config.max_range_m) ** 2
-            else:
-                range_factor = 1.0
+            range_factor = 1.0 + (r / self._config.max_range_m) ** 2 if self._config.range_dependent_noise else 1.0
 
             # Add measurement noise
             noisy_range = r + self._rng.randn() * self._config.noise_range_m * range_factor
-            noisy_az_deg = azimuth_rad_to_deg(az) + (
-                self._rng.randn() * self._config.noise_azimuth_deg * range_factor
-            )
+            noisy_az_deg = azimuth_rad_to_deg(az) + (self._rng.randn() * self._config.noise_azimuth_deg * range_factor)
             radial_vel = self._compute_radial_velocity(pos, target.velocity)
             noisy_vel = radial_vel + self._rng.randn() * self._config.noise_velocity_mps
             noisy_rcs = rcs_dbsm + self._rng.randn() * self._config.noise_rcs_dbsm
 
-            detections.append({
-                "range_m": max(0.0, noisy_range),
-                "azimuth_deg": noisy_az_deg,
-                "velocity_mps": noisy_vel,
-                "rcs_dbsm": noisy_rcs,
-                "target_id": target.target_id,
-                # Quantum metadata
-                "qi_advantage_db": adv_db,
-                "entanglement_fidelity": fidelity,
-                "n_signal_photons": ns,
-                "receiver_type": self._config.receiver_type.value,
-                "pd_qi": pd_qi,
-                "pd_classical": pd_cl,
-                "transmissivity": eta,
-            })
+            detections.append(
+                {
+                    "range_m": max(0.0, noisy_range),
+                    "azimuth_deg": noisy_az_deg,
+                    "velocity_mps": noisy_vel,
+                    "rcs_dbsm": noisy_rcs,
+                    "target_id": target.target_id,
+                    # Quantum metadata
+                    "qi_advantage_db": adv_db,
+                    "entanglement_fidelity": fidelity,
+                    "n_signal_photons": ns,
+                    "receiver_type": self._config.receiver_type.value,
+                    "pd_qi": pd_qi,
+                    "pd_classical": pd_cl,
+                    "transmissivity": eta,
+                }
+            )
 
         # False alarms (fewer than classical due to quantum correlation)
         detections.extend(self._generate_false_alarms())
@@ -299,9 +297,7 @@ class QuantumRadarSimulator(AbstractSensor):
     def is_connected(self) -> bool:
         return self._connected
 
-    def _compute_radial_velocity(
-        self, position: np.ndarray, velocity: np.ndarray
-    ) -> float:
+    def _compute_radial_velocity(self, position: np.ndarray, velocity: np.ndarray) -> float:
         """Compute radial (Doppler) velocity toward the radar."""
         r = np.linalg.norm(position)
         if r < 1e-6:
@@ -317,19 +313,21 @@ class QuantumRadarSimulator(AbstractSensor):
         for _ in range(n_fa):
             r = self._rng.uniform(10.0, self._config.max_range_m)
             az = self._rng.uniform(-fov_half_deg, fov_half_deg)
-            alarms.append({
-                "range_m": r,
-                "azimuth_deg": az,
-                "velocity_mps": self._rng.randn() * 5.0,
-                "rcs_dbsm": self._rng.uniform(-10, 20),
-                "qi_advantage_db": 0.0,
-                "entanglement_fidelity": 0.0,
-                "n_signal_photons": self._config.n_signal,
-                "receiver_type": self._config.receiver_type.value,
-                "pd_qi": 0.0,
-                "pd_classical": 0.0,
-                "transmissivity": 0.0,
-            })
+            alarms.append(
+                {
+                    "range_m": r,
+                    "azimuth_deg": az,
+                    "velocity_mps": self._rng.randn() * 5.0,
+                    "rcs_dbsm": self._rng.uniform(-10, 20),
+                    "qi_advantage_db": 0.0,
+                    "entanglement_fidelity": 0.0,
+                    "n_signal_photons": self._config.n_signal,
+                    "receiver_type": self._config.receiver_type.value,
+                    "pd_qi": 0.0,
+                    "pd_classical": 0.0,
+                    "transmissivity": 0.0,
+                }
+            )
         return alarms
 
 
@@ -343,17 +341,19 @@ def quantum_radar_frame_to_detections(frame: SensorFrame) -> list[Detection]:
     for d in frame.data:
         az_rad = azimuth_deg_to_rad(d["azimuth_deg"])
         pos = polar_to_cartesian(d["range_m"], az_rad)
-        detections.append(Detection(
-            sensor_type=SensorType.QUANTUM_RADAR,
-            timestamp=frame.timestamp,
-            range_m=d["range_m"],
-            azimuth_deg=d["azimuth_deg"],
-            velocity_mps=d["velocity_mps"],
-            rcs_dbsm=d["rcs_dbsm"],
-            position_3d=np.array([pos[0], pos[1], 0.0]),
-            qi_advantage_db=d.get("qi_advantage_db"),
-            entanglement_fidelity=d.get("entanglement_fidelity"),
-            n_signal_photons=d.get("n_signal_photons"),
-            receiver_type=d.get("receiver_type"),
-        ))
+        detections.append(
+            Detection(
+                sensor_type=SensorType.QUANTUM_RADAR,
+                timestamp=frame.timestamp,
+                range_m=d["range_m"],
+                azimuth_deg=d["azimuth_deg"],
+                velocity_mps=d["velocity_mps"],
+                rcs_dbsm=d["rcs_dbsm"],
+                position_3d=np.array([pos[0], pos[1], 0.0]),
+                qi_advantage_db=d.get("qi_advantage_db"),
+                entanglement_fidelity=d.get("entanglement_fidelity"),
+                n_signal_photons=d.get("n_signal_photons"),
+                receiver_type=d.get("receiver_type"),
+            )
+        )
     return detections

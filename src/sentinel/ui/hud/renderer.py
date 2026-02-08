@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
-import cv2
 import numpy as np
 from omegaconf import DictConfig
 
@@ -31,10 +28,10 @@ class HUDRenderer:
         tracks: list[Track],
         detections: list[Detection],
         system_status: dict,
-        radar_tracks: Optional[list] = None,
-        fused_tracks: Optional[list] = None,
-        thermal_tracks: Optional[list] = None,
-        enhanced_fused_tracks: Optional[list] = None,
+        radar_tracks: list | None = None,
+        fused_tracks: list | None = None,
+        thermal_tracks: list | None = None,
+        enhanced_fused_tracks: list | None = None,
     ) -> np.ndarray:
         """Composite full HUD overlay onto camera frame.
 
@@ -124,9 +121,7 @@ class HUDRenderer:
                 self._elements.draw_threat_indicator(display, eft, w)
                 if eft.is_stealth_candidate:
                     has_stealth = True
-                if eft.is_hypersonic_candidate or (
-                    eft.temperature_k is not None and eft.temperature_k > 1500
-                ):
+                if eft.is_hypersonic_candidate or (eft.temperature_k is not None and eft.temperature_k > 1500):
                     has_hypersonic = True
 
             # Alert banners

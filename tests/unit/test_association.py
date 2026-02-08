@@ -1,10 +1,9 @@
 """Tests for Hungarian data association."""
 
 import numpy as np
-import pytest
 
-from sentinel.core.types import Detection, SensorType, TrackState
-from sentinel.tracking.association import INFEASIBLE, AssociationResult, HungarianAssociator
+from sentinel.core.types import Detection, SensorType
+from sentinel.tracking.association import AssociationResult, HungarianAssociator
 from sentinel.tracking.track import Track
 
 

@@ -121,7 +121,7 @@ class TestIMMManeuverDetection:
         vel = np.array([5.0, 3.0])
         imm.x = np.array([pos[0], vel[0], pos[1], vel[1]])
 
-        for i in range(50):
+        for _ in range(50):
             pos = pos + vel * 0.1
             imm.predict()
             z = pos + np.random.randn(2) * 1.0
@@ -165,7 +165,7 @@ class TestIMMRadarMode:
         imm.x = np.array([3000.0, -10.0, 4000.0, 5.0])
         for _ in range(10):
             imm.predict()
-            r = np.sqrt(imm.position[0]**2 + imm.position[1]**2)
+            r = np.sqrt(imm.position[0] ** 2 + imm.position[1] ** 2)
             az = np.arctan2(imm.position[1], imm.position[0])
             z = np.array([r + np.random.randn() * 5.0, az + np.random.randn() * 0.01])
             imm.update(z)

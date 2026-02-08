@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import enum
 import uuid
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -19,8 +19,9 @@ class SensorType(enum.Enum):
 
 class RadarBand(enum.Enum):
     """Radar frequency bands."""
-    VHF = "vhf"        # 30-300 MHz
-    UHF = "uhf"        # 300 MHz - 1 GHz
+
+    VHF = "vhf"  # 30-300 MHz
+    UHF = "uhf"  # 300 MHz - 1 GHz
     L_BAND = "l_band"  # 1-2 GHz
     S_BAND = "s_band"  # 2-4 GHz
     X_BAND = "x_band"  # 8-12 GHz
@@ -28,6 +29,7 @@ class RadarBand(enum.Enum):
 
 class ThermalBand(enum.Enum):
     """Infrared wavelength bands."""
+
     SWIR = "swir"  # 0.9-1.7 um
     MWIR = "mwir"  # 3-5 um
     LWIR = "lwir"  # 8-12 um
@@ -35,6 +37,7 @@ class ThermalBand(enum.Enum):
 
 class TargetType(enum.Enum):
     """Target classification for simulation."""
+
     CONVENTIONAL = "conventional"
     STEALTH = "stealth"
     HYPERSONIC = "hypersonic"
@@ -55,44 +58,46 @@ class Detection:
     timestamp: float  # epoch seconds
 
     # Camera fields
-    bbox: Optional[np.ndarray] = None  # [x1, y1, x2, y2] pixels
-    class_id: Optional[int] = None
-    class_name: Optional[str] = None
-    confidence: Optional[float] = None
+    bbox: np.ndarray | None = None  # [x1, y1, x2, y2] pixels
+    class_id: int | None = None
+    class_name: str | None = None
+    confidence: float | None = None
 
     # Radar fields
-    range_m: Optional[float] = None
-    azimuth_deg: Optional[float] = None
-    velocity_mps: Optional[float] = None
-    rcs_dbsm: Optional[float] = None
+    range_m: float | None = None
+    azimuth_deg: float | None = None
+    velocity_mps: float | None = None
+    rcs_dbsm: float | None = None
 
     # Thermal fields
-    elevation_deg: Optional[float] = None
-    temperature_k: Optional[float] = None
-    thermal_band: Optional[str] = None
-    intensity: Optional[float] = None
+    elevation_deg: float | None = None
+    temperature_k: float | None = None
+    thermal_band: str | None = None
+    intensity: float | None = None
 
     # Multi-frequency radar field
-    radar_band: Optional[str] = None
+    radar_band: str | None = None
 
     # Quantum illumination radar fields
-    qi_advantage_db: Optional[float] = None
-    entanglement_fidelity: Optional[float] = None
-    n_signal_photons: Optional[float] = None
-    receiver_type: Optional[str] = None
+    qi_advantage_db: float | None = None
+    entanglement_fidelity: float | None = None
+    n_signal_photons: float | None = None
+    receiver_type: str | None = None
 
     # Shared / fused
-    position_3d: Optional[np.ndarray] = None  # [x, y, z] world frame
+    position_3d: np.ndarray | None = None  # [x, y, z] world frame
 
     @property
-    def bbox_center(self) -> Optional[np.ndarray]:
+    def bbox_center(self) -> np.ndarray | None:
         """Return center [cx, cy] of bounding box."""
         if self.bbox is None:
             return None
-        return np.array([
-            (self.bbox[0] + self.bbox[2]) / 2,
-            (self.bbox[1] + self.bbox[3]) / 2,
-        ])
+        return np.array(
+            [
+                (self.bbox[0] + self.bbox[2]) / 2,
+                (self.bbox[1] + self.bbox[3]) / 2,
+            ]
+        )
 
     @property
     def bbox_area(self) -> float:

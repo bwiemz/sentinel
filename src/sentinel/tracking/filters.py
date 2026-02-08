@@ -75,7 +75,7 @@ class KalmanFilter:
         S = self.H @ self.P @ self.H.T + self.R
 
         # Kalman gain
-        K = self.P @ self.H.T @ np.linalg.inv(S)
+        K = np.linalg.solve(S.T, (self.P @ self.H.T).T).T
 
         # State update
         self.x = self.x + K @ y
@@ -97,7 +97,7 @@ class KalmanFilter:
         """
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
-        return float(y.T @ np.linalg.inv(S) @ y)
+        return float(y.T @ np.linalg.solve(S, y))
 
     @property
     def predicted_measurement(self) -> np.ndarray:
@@ -131,10 +131,12 @@ class KalmanFilter:
         dt4 = dt3 * dt
 
         # 2x2 block for one axis
-        q_block = sigma_a ** 2 * np.array([
-            [dt4 / 4, dt3 / 2],
-            [dt3 / 2, dt2],
-        ])
+        q_block = sigma_a**2 * np.array(
+            [
+                [dt4 / 4, dt3 / 2],
+                [dt3 / 2, dt2],
+            ]
+        )
 
         Q = np.zeros((self.dim_state, self.dim_state))
         Q[0:2, 0:2] = q_block  # x, vx
@@ -147,7 +149,7 @@ class KalmanFilter:
 
     def set_measurement_noise_std(self, sigma: float) -> None:
         """Update measurement noise with new standard deviation."""
-        self.R = np.eye(self.dim_meas) * (sigma ** 2)
+        self.R = np.eye(self.dim_meas) * (sigma**2)
 
 
 class ExtendedKalmanFilter:
@@ -176,8 +178,8 @@ class ExtendedKalmanFilter:
 
         # State covariance -- high initial uncertainty
         self.P = np.eye(dim_state) * 1000.0
-        self.P[0, 0] = 100.0   # Position x (meters)
-        self.P[2, 2] = 100.0   # Position y (meters)
+        self.P[0, 0] = 100.0  # Position x (meters)
+        self.P[2, 2] = 100.0  # Position y (meters)
 
         # State transition (constant velocity, same as KF)
         self.F = np.eye(dim_state)
@@ -213,7 +215,7 @@ class ExtendedKalmanFilter:
         S = H @ self.P @ H.T + self.R
 
         # Kalman gain
-        K = self.P @ H.T @ np.linalg.inv(S)
+        K = np.linalg.solve(S.T, (self.P @ H.T).T).T
 
         # State update
         self.x = self.x + K @ y
@@ -243,10 +245,12 @@ class ExtendedKalmanFilter:
         r = max(np.sqrt(px * px + py * py), 1e-6)
         r2 = r * r
 
-        return np.array([
-            [px / r,    0.0,  py / r,    0.0],
-            [-py / r2,  0.0,  px / r2,   0.0],
-        ])
+        return np.array(
+            [
+                [px / r, 0.0, py / r, 0.0],
+                [-py / r2, 0.0, px / r2, 0.0],
+            ]
+        )
 
     def gating_distance(self, z: np.ndarray) -> float:
         """Squared Mahalanobis distance in polar measurement space.
@@ -257,7 +261,7 @@ class ExtendedKalmanFilter:
         y = z - self.h(self.x)
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
         S = H @ self.P @ H.T + self.R
-        return float(y.T @ np.linalg.inv(S) @ y)
+        return float(y.T @ np.linalg.solve(S, y))
 
     @property
     def predicted_measurement(self) -> np.ndarray:
@@ -286,10 +290,12 @@ class ExtendedKalmanFilter:
         dt3 = dt2 * dt
         dt4 = dt3 * dt
 
-        q_block = sigma_a ** 2 * np.array([
-            [dt4 / 4, dt3 / 2],
-            [dt3 / 2, dt2],
-        ])
+        q_block = sigma_a**2 * np.array(
+            [
+                [dt4 / 4, dt3 / 2],
+                [dt3 / 2, dt2],
+            ]
+        )
 
         Q = np.zeros((self.dim_state, self.dim_state))
         Q[0:2, 0:2] = q_block
@@ -302,7 +308,7 @@ class ExtendedKalmanFilter:
 
     def set_measurement_noise(self, sigma_range: float, sigma_azimuth_rad: float) -> None:
         """Set measurement noise from range (m) and azimuth (rad) std devs."""
-        self.R = np.diag([sigma_range ** 2, sigma_azimuth_rad ** 2])
+        self.R = np.diag([sigma_range**2, sigma_azimuth_rad**2])
 
 
 class BearingOnlyEKF:
@@ -333,8 +339,8 @@ class BearingOnlyEKF:
 
         # High initial uncertainty, especially in range direction
         self.P = np.eye(dim_state) * 10000.0
-        self.P[0, 0] = 1e6   # Very uncertain in x (range)
-        self.P[2, 2] = 1e6   # Very uncertain in y
+        self.P[0, 0] = 1e6  # Very uncertain in x (range)
+        self.P[2, 2] = 1e6  # Very uncertain in y
 
         # Constant velocity transition
         self.F = np.eye(dim_state)
@@ -359,7 +365,7 @@ class BearingOnlyEKF:
         # Angular wrapping
         y[0] = (y[0] + np.pi) % (2 * np.pi) - np.pi
         S = H @ self.P @ H.T + self.R
-        K = self.P @ H.T @ np.linalg.inv(S)
+        K = np.linalg.solve(S.T, (self.P @ H.T).T).T
         self.x = self.x + K @ y
         I_KH = np.eye(self.dim_state) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
@@ -385,7 +391,7 @@ class BearingOnlyEKF:
         y = z - self.h(self.x)
         y[0] = (y[0] + np.pi) % (2 * np.pi) - np.pi
         S = H @ self.P @ H.T + self.R
-        return float(y.T @ np.linalg.inv(S) @ y)
+        return float(y.T @ np.linalg.solve(S, y))
 
     @property
     def predicted_measurement(self) -> np.ndarray:
@@ -403,17 +409,19 @@ class BearingOnlyEKF:
         dt2 = dt * dt
         dt3 = dt2 * dt
         dt4 = dt3 * dt
-        q_block = sigma_a ** 2 * np.array([
-            [dt4 / 4, dt3 / 2],
-            [dt3 / 2, dt2],
-        ])
+        q_block = sigma_a**2 * np.array(
+            [
+                [dt4 / 4, dt3 / 2],
+                [dt3 / 2, dt2],
+            ]
+        )
         Q = np.zeros((self.dim_state, self.dim_state))
         Q[0:2, 0:2] = q_block
         Q[2:4, 2:4] = q_block
         return Q
 
     def set_measurement_noise_std(self, sigma_azimuth_rad: float) -> None:
-        self.R = np.array([[sigma_azimuth_rad ** 2]])
+        self.R = np.array([[sigma_azimuth_rad**2]])
 
 
 class ConstantAccelerationKF:
@@ -440,8 +448,8 @@ class ConstantAccelerationKF:
 
         # State covariance
         self.P = np.eye(dim_state) * 1000.0
-        self.P[0, 0] = 10.0   # position x
-        self.P[3, 3] = 10.0   # position y
+        self.P[0, 0] = 10.0  # position x
+        self.P[3, 3] = 10.0  # position y
 
         # State transition: constant acceleration
         # [x ]   [1  dt  dt²/2  0  0   0    ] [x ]
@@ -475,7 +483,7 @@ class ConstantAccelerationKF:
     def update(self, z: np.ndarray) -> np.ndarray:
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
-        K = self.P @ self.H.T @ np.linalg.inv(S)
+        K = np.linalg.solve(S.T, (self.P @ self.H.T).T).T
         self.x = self.x + K @ y
         I_KH = np.eye(self.dim_state) - K @ self.H
         self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
@@ -484,7 +492,7 @@ class ConstantAccelerationKF:
     def gating_distance(self, z: np.ndarray) -> float:
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
-        return float(y.T @ np.linalg.inv(S) @ y)
+        return float(y.T @ np.linalg.solve(S, y))
 
     @property
     def predicted_measurement(self) -> np.ndarray:
@@ -518,11 +526,13 @@ class ConstantAccelerationKF:
         dt6 = dt5 * dt
 
         # 3x3 block for one axis [pos, vel, acc]
-        q_block = sigma_j ** 2 * np.array([
-            [dt6 / 36, dt5 / 12, dt4 / 6],
-            [dt5 / 12, dt4 / 4,  dt3 / 2],
-            [dt4 / 6,  dt3 / 2,  dt2],
-        ])
+        q_block = sigma_j**2 * np.array(
+            [
+                [dt6 / 36, dt5 / 12, dt4 / 6],
+                [dt5 / 12, dt4 / 4, dt3 / 2],
+                [dt4 / 6, dt3 / 2, dt2],
+            ]
+        )
 
         Q = np.zeros((self.dim_state, self.dim_state))
         Q[0:3, 0:3] = q_block  # x, vx, ax
@@ -533,7 +543,7 @@ class ConstantAccelerationKF:
         self.Q = self._build_process_noise(self.dt, sigma_j)
 
     def set_measurement_noise_std(self, sigma: float) -> None:
-        self.R = np.eye(self.dim_meas) * (sigma ** 2)
+        self.R = np.eye(self.dim_meas) * (sigma**2)
 
 
 class ConstantAccelerationEKF:
@@ -583,7 +593,7 @@ class ConstantAccelerationEKF:
         y = z - self.h(self.x)
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
         S = H @ self.P @ H.T + self.R
-        K = self.P @ H.T @ np.linalg.inv(S)
+        K = np.linalg.solve(S.T, (self.P @ H.T).T).T
         self.x = self.x + K @ y
         I_KH = np.eye(self.dim_state) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
@@ -601,17 +611,19 @@ class ConstantAccelerationEKF:
         px, _, _, py, _, _ = x
         r = max(np.sqrt(px * px + py * py), 1e-6)
         r2 = r * r
-        return np.array([
-            [px / r,  0.0, 0.0, py / r,  0.0, 0.0],
-            [-py / r2, 0.0, 0.0, px / r2, 0.0, 0.0],
-        ])
+        return np.array(
+            [
+                [px / r, 0.0, 0.0, py / r, 0.0, 0.0],
+                [-py / r2, 0.0, 0.0, px / r2, 0.0, 0.0],
+            ]
+        )
 
     def gating_distance(self, z: np.ndarray) -> float:
         H = self.H_jacobian(self.x)
         y = z - self.h(self.x)
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
         S = H @ self.P @ H.T + self.R
-        return float(y.T @ np.linalg.inv(S) @ y)
+        return float(y.T @ np.linalg.solve(S, y))
 
     @property
     def predicted_measurement(self) -> np.ndarray:
@@ -640,11 +652,13 @@ class ConstantAccelerationEKF:
         dt4 = dt3 * dt
         dt5 = dt4 * dt
         dt6 = dt5 * dt
-        q_block = sigma_j ** 2 * np.array([
-            [dt6 / 36, dt5 / 12, dt4 / 6],
-            [dt5 / 12, dt4 / 4,  dt3 / 2],
-            [dt4 / 6,  dt3 / 2,  dt2],
-        ])
+        q_block = sigma_j**2 * np.array(
+            [
+                [dt6 / 36, dt5 / 12, dt4 / 6],
+                [dt5 / 12, dt4 / 4, dt3 / 2],
+                [dt4 / 6, dt3 / 2, dt2],
+            ]
+        )
         Q = np.zeros((self.dim_state, self.dim_state))
         Q[0:3, 0:3] = q_block
         Q[3:6, 3:6] = q_block
@@ -654,7 +668,7 @@ class ConstantAccelerationEKF:
         self.Q = self._build_process_noise(self.dt, sigma_j)
 
     def set_measurement_noise(self, sigma_range: float, sigma_azimuth_rad: float) -> None:
-        self.R = np.diag([sigma_range ** 2, sigma_azimuth_rad ** 2])
+        self.R = np.diag([sigma_range**2, sigma_azimuth_rad**2])
 
 
 class KalmanFilter3D:
@@ -701,7 +715,7 @@ class KalmanFilter3D:
     def update(self, z: np.ndarray) -> np.ndarray:
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
-        K = self.P @ self.H.T @ np.linalg.inv(S)
+        K = np.linalg.solve(S.T, (self.P @ self.H.T).T).T
         self.x = self.x + K @ y
         I_KH = np.eye(self.dim_state) - K @ self.H
         self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
@@ -710,7 +724,7 @@ class KalmanFilter3D:
     def gating_distance(self, z: np.ndarray) -> float:
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
-        return float(y.T @ np.linalg.inv(S) @ y)
+        return float(y.T @ np.linalg.solve(S, y))
 
     @property
     def predicted_measurement(self) -> np.ndarray:
@@ -734,10 +748,12 @@ class KalmanFilter3D:
         dt2 = dt * dt
         dt3 = dt2 * dt
         dt4 = dt3 * dt
-        q_block = sigma_a ** 2 * np.array([
-            [dt4 / 4, dt3 / 2],
-            [dt3 / 2, dt2],
-        ])
+        q_block = sigma_a**2 * np.array(
+            [
+                [dt4 / 4, dt3 / 2],
+                [dt3 / 2, dt2],
+            ]
+        )
         Q = np.zeros((6, 6))
         Q[0:2, 0:2] = q_block
         Q[2:4, 2:4] = q_block
@@ -748,7 +764,7 @@ class KalmanFilter3D:
         self.Q = self._build_process_noise(self.dt, sigma_a)
 
     def set_measurement_noise_std(self, sigma: float) -> None:
-        self.R = np.eye(3) * (sigma ** 2)
+        self.R = np.eye(3) * (sigma**2)
 
 
 class ExtendedKalmanFilter3D:
@@ -795,7 +811,7 @@ class ExtendedKalmanFilter3D:
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
         y[2] = (y[2] + np.pi) % (2 * np.pi) - np.pi
         S = H @ self.P @ H.T + self.R
-        K = self.P @ H.T @ np.linalg.inv(S)
+        K = np.linalg.solve(S.T, (self.P @ H.T).T).T
         self.x = self.x + K @ y
         I_KH = np.eye(self.dim_state) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
@@ -851,7 +867,7 @@ class ExtendedKalmanFilter3D:
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
         y[2] = (y[2] + np.pi) % (2 * np.pi) - np.pi
         S = H @ self.P @ H.T + self.R
-        return float(y.T @ np.linalg.inv(S) @ y)
+        return float(y.T @ np.linalg.solve(S, y))
 
     @property
     def predicted_measurement(self) -> np.ndarray:
@@ -876,10 +892,12 @@ class ExtendedKalmanFilter3D:
         dt2 = dt * dt
         dt3 = dt2 * dt
         dt4 = dt3 * dt
-        q_block = sigma_a ** 2 * np.array([
-            [dt4 / 4, dt3 / 2],
-            [dt3 / 2, dt2],
-        ])
+        q_block = sigma_a**2 * np.array(
+            [
+                [dt4 / 4, dt3 / 2],
+                [dt3 / 2, dt2],
+            ]
+        )
         Q = np.zeros((6, 6))
         Q[0:2, 0:2] = q_block
         Q[2:4, 2:4] = q_block
@@ -890,11 +908,18 @@ class ExtendedKalmanFilter3D:
         self.Q = self._build_process_noise(self.dt, sigma_a)
 
     def set_measurement_noise(
-        self, sigma_range: float, sigma_azimuth_rad: float, sigma_elevation_rad: float,
+        self,
+        sigma_range: float,
+        sigma_azimuth_rad: float,
+        sigma_elevation_rad: float,
     ) -> None:
-        self.R = np.diag([
-            sigma_range ** 2, sigma_azimuth_rad ** 2, sigma_elevation_rad ** 2,
-        ])
+        self.R = np.diag(
+            [
+                sigma_range**2,
+                sigma_azimuth_rad**2,
+                sigma_elevation_rad**2,
+            ]
+        )
 
 
 class ExtendedKalmanFilterWithDoppler:
@@ -945,7 +970,7 @@ class ExtendedKalmanFilterWithDoppler:
         # Angular wrapping on azimuth
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
         S = H @ self.P @ H.T + self.R
-        K = self.P @ H.T @ np.linalg.inv(S)
+        K = np.linalg.solve(S.T, (self.P @ H.T).T).T
         self.x = self.x + K @ y
         I_KH = np.eye(self.dim_state) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
@@ -995,7 +1020,7 @@ class ExtendedKalmanFilterWithDoppler:
         y = z - self.h(self.x)
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
         S = H @ self.P @ H.T + self.R
-        return float(y.T @ np.linalg.inv(S) @ y)
+        return float(y.T @ np.linalg.solve(S, y))
 
     @property
     def predicted_measurement(self) -> np.ndarray:
@@ -1018,10 +1043,12 @@ class ExtendedKalmanFilterWithDoppler:
         dt2 = dt * dt
         dt3 = dt2 * dt
         dt4 = dt3 * dt
-        q_block = sigma_a ** 2 * np.array([
-            [dt4 / 4, dt3 / 2],
-            [dt3 / 2, dt2],
-        ])
+        q_block = sigma_a**2 * np.array(
+            [
+                [dt4 / 4, dt3 / 2],
+                [dt3 / 2, dt2],
+            ]
+        )
         Q = np.zeros((self.dim_state, self.dim_state))
         Q[0:2, 0:2] = q_block
         Q[2:4, 2:4] = q_block
@@ -1031,8 +1058,15 @@ class ExtendedKalmanFilterWithDoppler:
         self.Q = self._build_process_noise(self.dt, sigma_a)
 
     def set_measurement_noise(
-        self, sigma_range: float, sigma_azimuth_rad: float, sigma_velocity: float,
+        self,
+        sigma_range: float,
+        sigma_azimuth_rad: float,
+        sigma_velocity: float,
     ) -> None:
-        self.R = np.diag([
-            sigma_range ** 2, sigma_azimuth_rad ** 2, sigma_velocity ** 2,
-        ])
+        self.R = np.diag(
+            [
+                sigma_range**2,
+                sigma_azimuth_rad**2,
+                sigma_velocity**2,
+            ]
+        )

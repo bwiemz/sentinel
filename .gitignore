@@ -57,3 +57,7 @@ coverage.xml
 # Profiling
 *.prof
 *.pstats
+
+# Claude Code temp files
+tmpclaude-*
+nul

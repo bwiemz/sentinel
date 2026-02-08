@@ -73,10 +73,12 @@ class IMMFilter:
 
         # Markov transition matrix
         p = transition_prob
-        self.TPM = np.array([
-            [p, 1 - p],
-            [1 - p, p],
-        ])
+        self.TPM = np.array(
+            [
+                [p, 1 - p],
+                [1 - p, p],
+            ]
+        )
 
         # Combined state (in max-dimension space for output)
         self._combined_x = np.zeros(6)
@@ -208,7 +210,7 @@ class IMMFilter:
 
     def _compute_likelihood(self, f, z: np.ndarray) -> float:
         """Compute Gaussian measurement likelihood for a filter."""
-        if hasattr(f, 'h'):
+        if hasattr(f, "h"):
             # EKF: nonlinear measurement
             H = f.H_jacobian(f.x)
             y = z - f.h(f.x)
@@ -226,8 +228,7 @@ class IMMFilter:
         if det_S < 1e-300:
             return 1e-300
 
-        S_inv = np.linalg.inv(S)
-        exponent = -0.5 * float(y.T @ S_inv @ y)
+        exponent = -0.5 * float(y.T @ np.linalg.solve(S, y))
         # Clamp exponent to prevent underflow
         exponent = max(exponent, -500.0)
         normalization = 1.0 / np.sqrt((2 * np.pi) ** dim * det_S)
@@ -263,10 +264,14 @@ class IMMFilter:
     @property
     def x(self) -> np.ndarray:
         """4D state compatible with CV interface: [x, vx, y, vy]."""
-        return np.array([
-            self._combined_x[0], self._combined_x[1],
-            self._combined_x[3], self._combined_x[4],
-        ])
+        return np.array(
+            [
+                self._combined_x[0],
+                self._combined_x[1],
+                self._combined_x[3],
+                self._combined_x[4],
+            ]
+        )
 
     @x.setter
     def x(self, value: np.ndarray) -> None:
@@ -317,12 +322,12 @@ class IMMFilter:
             f.set_process_noise_std(sigma)
 
     def set_measurement_noise_std(self, sigma: float) -> None:
-        if hasattr(self._filters[0], 'set_measurement_noise_std'):
+        if hasattr(self._filters[0], "set_measurement_noise_std"):
             self._filters[0].set_measurement_noise_std(sigma)
-        if hasattr(self._filters[1], 'set_measurement_noise_std'):
+        if hasattr(self._filters[1], "set_measurement_noise_std"):
             self._filters[1].set_measurement_noise_std(sigma)
 
     def set_measurement_noise(self, sigma_range: float, sigma_azimuth_rad: float) -> None:
         for f in self._filters:
-            if hasattr(f, 'set_measurement_noise'):
+            if hasattr(f, "set_measurement_noise"):
                 f.set_measurement_noise(sigma_range, sigma_azimuth_rad)

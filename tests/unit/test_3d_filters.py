@@ -140,11 +140,13 @@ class TestExtendedKalmanFilter3D:
 
         for _ in range(50):
             ekf.predict()
-            z = np.array([
-                true_r + np.random.randn() * 5.0,
-                true_az + np.random.randn() * np.radians(1.0),
-                true_el + np.random.randn() * np.radians(1.0),
-            ])
+            z = np.array(
+                [
+                    true_r + np.random.randn() * 5.0,
+                    true_az + np.random.randn() * np.radians(1.0),
+                    true_el + np.random.randn() * np.radians(1.0),
+                ]
+            )
             ekf.update(z)
 
         assert abs(ekf.position[0] - true_x) < 300.0

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from omegaconf import DictConfig
 
 from sentinel.core.types import Detection, TrackState
@@ -71,9 +69,7 @@ class ThermalTrackManager:
             self._tracks[track.track_id] = track
 
         # 6. Prune dead tracks
-        self._tracks = {
-            tid: t for tid, t in self._tracks.items() if t.is_alive
-        }
+        self._tracks = {tid: t for tid, t in self._tracks.items() if t.is_alive}
 
         return list(self._tracks.values())
 

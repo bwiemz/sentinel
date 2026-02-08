@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from sentinel.tracking.filters import ConstantAccelerationKF, ConstantAccelerationEKF
+from sentinel.tracking.filters import ConstantAccelerationEKF, ConstantAccelerationKF
 
 
 class TestConstantAccelerationKF:
@@ -148,10 +148,12 @@ class TestConstantAccelerationEKF:
         true_az = np.arctan2(true_y, true_x)
         for _ in range(50):
             ekf.predict()
-            z = np.array([
-                true_range + np.random.randn() * 5.0,
-                true_az + np.random.randn() * np.radians(1.0),
-            ])
+            z = np.array(
+                [
+                    true_range + np.random.randn() * 5.0,
+                    true_az + np.random.randn() * np.radians(1.0),
+                ]
+            )
             ekf.update(z)
         assert abs(ekf.position[0] - true_x) < 200.0
         assert abs(ekf.position[1] - true_y) < 200.0

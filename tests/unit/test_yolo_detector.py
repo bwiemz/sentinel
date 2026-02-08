@@ -11,6 +11,7 @@ from sentinel.core.types import SensorType
 
 try:
     from sentinel.detection.yolo import YOLODetector
+
     HAS_YOLO = True
 except ImportError:
     HAS_YOLO = False

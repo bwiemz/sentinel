@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Iterator, Optional
+from collections.abc import Iterator
 
 from sentinel.sensors.frame import SensorFrame
 
@@ -26,7 +26,7 @@ class AbstractSensor(ABC):
         ...
 
     @abstractmethod
-    def read_frame(self) -> Optional[SensorFrame]:
+    def read_frame(self) -> SensorFrame | None:
         """Read a single frame. Returns None if no data available."""
         ...
 

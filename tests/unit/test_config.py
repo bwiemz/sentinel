@@ -1,7 +1,5 @@
 """Tests for the configuration system."""
 
-from pathlib import Path
-
 import pytest
 from omegaconf import DictConfig
 

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
-from sentinel.core.types import Detection, TrackState, generate_track_id
+from sentinel.core.types import Detection
 from sentinel.tracking.base_track import TrackBase
 from sentinel.tracking.filters import (
     ConstantAccelerationEKF,
@@ -47,11 +47,11 @@ class RadarTrack(TrackBase):
     def __init__(
         self,
         detection: Detection,
-        track_id: Optional[str] = None,
+        track_id: str | None = None,
         dt: float = 0.1,
         confirm_hits: int = 3,
         max_coast: int = 5,
-        confirm_window: Optional[int] = None,
+        confirm_window: int | None = None,
         tentative_delete_misses: int = 3,
         confirmed_coast_misses: int = 5,
         coast_reconfirm_hits: int = 2,
@@ -101,7 +101,7 @@ class RadarTrack(TrackBase):
                 self.ekf.P[2, 2] = 100.0
 
         # Last detection
-        self.last_detection: Optional[Detection] = detection
+        self.last_detection: Detection | None = detection
 
     def predict(self) -> np.ndarray:
         """Predict next state. Call once per scan."""
@@ -155,7 +155,7 @@ class RadarTrack(TrackBase):
         return azimuth_rad_to_deg(az)
 
     @property
-    def elevation_deg(self) -> Optional[float]:
+    def elevation_deg(self) -> float | None:
         """Current estimated elevation (3D mode only)."""
         if not self._use_3d:
             return None
@@ -164,7 +164,7 @@ class RadarTrack(TrackBase):
         return float(np.degrees(np.arctan2(pos[2], r_xy)))
 
     @property
-    def predicted_bbox(self) -> Optional[np.ndarray]:
+    def predicted_bbox(self) -> np.ndarray | None:
         """Not applicable for radar tracks."""
         return None
 

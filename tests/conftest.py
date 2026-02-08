@@ -32,6 +32,7 @@ def sample_frame() -> np.ndarray:
     frame = np.zeros((720, 1280, 3), dtype=np.uint8)
     # Add some rectangles to simulate objects
     import cv2
+
     cv2.rectangle(frame, (200, 200), (400, 400), (0, 0, 255), -1)
     cv2.rectangle(frame, (600, 300), (800, 500), (255, 0, 0), -1)
     cv2.circle(frame, (1000, 400), 80, (0, 255, 0), -1)

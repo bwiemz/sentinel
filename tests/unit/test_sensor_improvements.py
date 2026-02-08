@@ -4,12 +4,10 @@ import numpy as np
 import pytest
 
 from sentinel.core.types import Detection, SensorType
-from sentinel.sensors.physics import radar_snr, _snr_to_pd
+from sentinel.sensors.multifreq_radar_sim import MultiFreqRadarConfig
+from sentinel.sensors.physics import _snr_to_pd, radar_snr
+from sentinel.sensors.quantum_radar_sim import QuantumRadarConfig
 from sentinel.sensors.radar_sim import RadarSimConfig, RadarSimulator, RadarTarget
-from sentinel.sensors.multifreq_radar_sim import MultiFreqRadarConfig, MultiFreqRadarSimulator
-from sentinel.sensors.quantum_radar_sim import QuantumRadarConfig, QuantumRadarSimulator
-from sentinel.sensors.radar_sim import MultiFreqRadarTarget
-from sentinel.core.types import TargetType
 from sentinel.tracking.filters import ExtendedKalmanFilterWithDoppler
 from sentinel.tracking.radar_track import RadarTrack
 
@@ -256,11 +254,13 @@ class TestDopplerEKF:
 
         for _ in range(50):
             ekf.predict()
-            z = np.array([
-                true_r + np.random.randn() * 5.0,
-                true_az + np.random.randn() * np.radians(1.0),
-                true_vr + np.random.randn() * 0.5,
-            ])
+            z = np.array(
+                [
+                    true_r + np.random.randn() * 5.0,
+                    true_az + np.random.randn() * np.radians(1.0),
+                    true_vr + np.random.randn() * 0.5,
+                ]
+            )
             ekf.update(z)
 
         assert abs(ekf.position[0] - true_x) < 300.0
@@ -295,9 +295,15 @@ class TestDopplerEKF:
             ekf_std.update(np.array([true_r + r_noise, true_az + az_noise]))
 
             ekf_dop.predict()
-            ekf_dop.update(np.array([
-                true_r + r_noise, true_az + az_noise, true_vr + vr_noise,
-            ]))
+            ekf_dop.update(
+                np.array(
+                    [
+                        true_r + r_noise,
+                        true_az + az_noise,
+                        true_vr + vr_noise,
+                    ]
+                )
+            )
 
         # Doppler EKF should have better velocity estimate
         vel_err_std = np.linalg.norm(ekf_std.velocity - [true_vx, true_vy])

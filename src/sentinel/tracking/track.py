@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
-from sentinel.core.types import Detection, TrackState, generate_track_id
+from sentinel.core.types import Detection
 from sentinel.tracking.base_track import TrackBase
 from sentinel.tracking.filters import ConstantAccelerationKF, KalmanFilter
 from sentinel.tracking.imm import IMMFilter
@@ -34,16 +34,16 @@ class Track(TrackBase):
     def __init__(
         self,
         detection: Detection,
-        track_id: Optional[str] = None,
+        track_id: str | None = None,
         dt: float = 1 / 30,
         confirm_hits: int = 3,
         max_coast: int = 15,
-        confirm_window: Optional[int] = None,
+        confirm_window: int | None = None,
         tentative_delete_misses: int = 3,
         confirmed_coast_misses: int = 5,
         coast_reconfirm_hits: int = 2,
-        process_noise_std: Optional[float] = None,
-        measurement_noise_std: Optional[float] = None,
+        process_noise_std: float | None = None,
+        measurement_noise_std: float | None = None,
         filter_type: str = "kf",
     ):
         super().__init__(
@@ -69,7 +69,7 @@ class Track(TrackBase):
             self.kf.set_measurement_noise_std(measurement_noise_std)
 
         # Detection history
-        self.last_detection: Optional[Detection] = detection
+        self.last_detection: Detection | None = detection
         self.class_histogram: dict[str, int] = {}
 
         # Initialize KF from first detection
@@ -104,9 +104,7 @@ class Track(TrackBase):
 
         # Update class histogram
         if detection.class_name:
-            self.class_histogram[detection.class_name] = (
-                self.class_histogram.get(detection.class_name, 0) + 1
-            )
+            self.class_histogram[detection.class_name] = self.class_histogram.get(detection.class_name, 0) + 1
 
         self._record_hit()
 
@@ -127,7 +125,7 @@ class Track(TrackBase):
         return self.kf.velocity
 
     @property
-    def predicted_bbox(self) -> Optional[np.ndarray]:
+    def predicted_bbox(self) -> np.ndarray | None:
         """Estimated bounding box from KF state + last detection size."""
         if self.last_detection is None or self.last_detection.bbox is None:
             return None
@@ -138,7 +136,7 @@ class Track(TrackBase):
         return np.array([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2])
 
     @property
-    def dominant_class(self) -> Optional[str]:
+    def dominant_class(self) -> str | None:
         """Most frequently detected class for this track."""
         if not self.class_histogram:
             return None
@@ -155,7 +153,5 @@ class Track(TrackBase):
             "hits": self.hits,
             "misses": self.misses,
             "class_name": self.dominant_class,
-            "confidence": (
-                self.last_detection.confidence if self.last_detection else None
-            ),
+            "confidence": (self.last_detection.confidence if self.last_detection else None),
         }

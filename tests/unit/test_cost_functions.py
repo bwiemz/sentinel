@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 from sentinel.tracking.cost_functions import centroid_distance, iou_bbox
-from sentinel.tracking.filters import KalmanFilter
 
 
 class TestIoUBbox:

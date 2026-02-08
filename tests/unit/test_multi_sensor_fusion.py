@@ -1,26 +1,24 @@
 """Tests for enhanced multi-sensor fusion."""
 
 import numpy as np
-import pytest
 from omegaconf import OmegaConf
 
 from sentinel.core.types import Detection, SensorType, TrackState
 from sentinel.fusion.multi_sensor_fusion import (
-    EnhancedFusedTrack,
-    MultiSensorFusion,
     THREAT_CRITICAL,
     THREAT_HIGH,
     THREAT_LOW,
     THREAT_MEDIUM,
+    EnhancedFusedTrack,
+    MultiSensorFusion,
 )
 from sentinel.fusion.multifreq_correlator import CorrelatedDetection
-from sentinel.tracking.filters import ExtendedKalmanFilter, KalmanFilter
 from sentinel.tracking.radar_track import RadarTrack
 from sentinel.tracking.thermal_track import ThermalTrack
 from sentinel.tracking.track import Track
 
-
 # === Helpers ===
+
 
 def _make_cam_track(px_x=640.0, px_y=360.0, track_id="CAM-01"):
     """Create a mock camera track at given pixel position."""
@@ -31,12 +29,15 @@ def _make_cam_track(px_x=640.0, px_y=360.0, track_id="CAM-01"):
         class_name="aircraft",
         confidence=0.9,
     )
-    cfg = OmegaConf.create({
-        "filter": {"dt": 0.033},
-        "association": {"gate_threshold": 9.21, "iou_weight": 0.5, "mahalanobis_weight": 0.5},
-        "track_management": {"confirm_hits": 1, "confirm_window": 3, "max_coast_frames": 10, "max_tracks": 50},
-    })
+    cfg = OmegaConf.create(
+        {
+            "filter": {"dt": 0.033},
+            "association": {"gate_threshold": 9.21, "iou_weight": 0.5, "mahalanobis_weight": 0.5},
+            "track_management": {"confirm_hits": 1, "confirm_window": 3, "max_coast_frames": 10, "max_tracks": 50},
+        }
+    )
     from sentinel.tracking.track_manager import TrackManager
+
     mgr = TrackManager(cfg)
     mgr.step([det])
     mgr.step([det])  # Confirm
@@ -149,7 +150,8 @@ class TestMultiSensorFusion:
     def test_thermal_augments_radar(self):
         """Thermal track at same azimuth should merge into radar-fused track."""
         msf = MultiSensorFusion(
-            camera_hfov_deg=60.0, image_width_px=1280,
+            camera_hfov_deg=60.0,
+            image_width_px=1280,
             thermal_azimuth_gate_deg=5.0,
         )
         rdr = _make_radar_track(azimuth_deg=5.0)
@@ -170,8 +172,11 @@ class TestMultiSensorFusion:
         rdr = _make_radar_track(azimuth_deg=5.0)
         cd = CorrelatedDetection(
             primary_detection=Detection(
-                sensor_type=SensorType.RADAR, timestamp=1.0,
-                range_m=5000.0, azimuth_deg=5.0, radar_band="vhf",
+                sensor_type=SensorType.RADAR,
+                timestamp=1.0,
+                range_m=5000.0,
+                azimuth_deg=5.0,
+                radar_band="vhf",
             ),
             bands_detected=["vhf"],
             is_stealth_candidate=True,
@@ -183,7 +188,8 @@ class TestMultiSensorFusion:
 
     def test_threat_medium_multi_sensor(self):
         msf = MultiSensorFusion(
-            camera_hfov_deg=60.0, image_width_px=1280,
+            camera_hfov_deg=60.0,
+            image_width_px=1280,
             thermal_azimuth_gate_deg=5.0,
         )
         cam = _make_cam_track(px_x=640.0)
@@ -201,7 +207,8 @@ class TestMultiSensorFusion:
 
     def test_fusion_quality_increases_with_sensors(self):
         msf = MultiSensorFusion(
-            camera_hfov_deg=60.0, image_width_px=1280,
+            camera_hfov_deg=60.0,
+            image_width_px=1280,
             thermal_azimuth_gate_deg=5.0,
         )
         cam = _make_cam_track(px_x=640.0)
@@ -210,7 +217,7 @@ class TestMultiSensorFusion:
 
         r1 = msf.fuse([cam], [])
         r2 = msf.fuse([cam], [rdr])
-        r3 = msf.fuse([cam], [rdr], [thm])
+        _r3 = msf.fuse([cam], [rdr], [thm])
 
         q1 = r1[0].fusion_quality
         # Multi-sensor should generally have higher quality

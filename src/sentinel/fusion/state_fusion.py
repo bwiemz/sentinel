@@ -11,12 +11,27 @@ safety-critical tracking where sensor error correlations are unknown.
 from __future__ import annotations
 
 import numpy as np
+from scipy.linalg import cho_factor, cho_solve
 from scipy.optimize import minimize_scalar
 
 
+def _spd_inv(P: np.ndarray) -> np.ndarray:
+    """Invert a symmetric positive-definite matrix via Cholesky decomposition."""
+    c, low = cho_factor(P)
+    return cho_solve((c, low), np.eye(P.shape[0]))
+
+
+def _spd_solve(P: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Solve P @ x = b for SPD matrix P via Cholesky."""
+    c, low = cho_factor(P)
+    return cho_solve((c, low), b)
+
+
 def covariance_intersection(
-    x1: np.ndarray, P1: np.ndarray,
-    x2: np.ndarray, P2: np.ndarray,
+    x1: np.ndarray,
+    P1: np.ndarray,
+    x2: np.ndarray,
+    P2: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Covariance Intersection (CI) fusion.
 
@@ -37,16 +52,18 @@ def covariance_intersection(
 
 
 def _ci_with_omega(
-    x1: np.ndarray, P1: np.ndarray,
-    x2: np.ndarray, P2: np.ndarray,
+    x1: np.ndarray,
+    P1: np.ndarray,
+    x2: np.ndarray,
+    P2: np.ndarray,
     omega: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Apply CI with a given omega."""
-    P1_inv = np.linalg.inv(P1)
-    P2_inv = np.linalg.inv(P2)
+    P1_inv = _spd_inv(P1)
+    P2_inv = _spd_inv(P2)
 
     P_fused_inv = omega * P1_inv + (1 - omega) * P2_inv
-    P_fused = np.linalg.inv(P_fused_inv)
+    P_fused = _spd_inv(P_fused_inv)
 
     x_fused = P_fused @ (omega * P1_inv @ x1 + (1 - omega) * P2_inv @ x2)
     return x_fused, P_fused
@@ -57,12 +74,12 @@ def _optimize_omega(P1: np.ndarray, P2: np.ndarray) -> float:
 
     Uses scalar optimization since omega is 1D.
     """
-    P1_inv = np.linalg.inv(P1)
-    P2_inv = np.linalg.inv(P2)
+    P1_inv = _spd_inv(P1)
+    P2_inv = _spd_inv(P2)
 
     def objective(omega: float) -> float:
         P_fused_inv = omega * P1_inv + (1 - omega) * P2_inv
-        P_fused = np.linalg.inv(P_fused_inv)
+        P_fused = _spd_inv(P_fused_inv)
         return np.trace(P_fused)
 
     result = minimize_scalar(objective, bounds=(0.01, 0.99), method="bounded")
@@ -70,8 +87,10 @@ def _optimize_omega(P1: np.ndarray, P2: np.ndarray) -> float:
 
 
 def information_fusion(
-    x1: np.ndarray, P1: np.ndarray,
-    x2: np.ndarray, P2: np.ndarray,
+    x1: np.ndarray,
+    P1: np.ndarray,
+    x2: np.ndarray,
+    P2: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Information (naive) fusion for independent estimates.
 
@@ -86,11 +105,11 @@ def information_fusion(
     Returns:
         (x_fused, P_fused): Fused state and covariance.
     """
-    P1_inv = np.linalg.inv(P1)
-    P2_inv = np.linalg.inv(P2)
+    P1_inv = _spd_inv(P1)
+    P2_inv = _spd_inv(P2)
 
     P_fused_inv = P1_inv + P2_inv
-    P_fused = np.linalg.inv(P_fused_inv)
+    P_fused = _spd_inv(P_fused_inv)
 
     x_fused = P_fused @ (P1_inv @ x1 + P2_inv @ x2)
     return x_fused, P_fused

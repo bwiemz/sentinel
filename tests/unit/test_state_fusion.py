@@ -150,9 +150,9 @@ class TestPersistentFusedIDs:
 
         # Two separate fusions with different camera tracks
         r1 = fusion.fuse([cam1], [rdr])
-        key1_id = r1[0].fused_id
+        _key1_id = r1[0].fused_id
 
-        r2 = fusion.fuse([cam2], [rdr])
+        _r2 = fusion.fuse([cam2], [rdr])
         # cam2 is at a different position, but still within gate
         # The fused_id should be different because cam2 has different track_id
         assert cam1.track_id != cam2.track_id

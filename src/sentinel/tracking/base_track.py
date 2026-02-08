@@ -7,7 +7,6 @@ and scoring logic that is common to all track types (camera, radar, thermal).
 from __future__ import annotations
 
 from collections import deque
-from typing import Optional
 
 from sentinel.core.types import TrackState, generate_track_id
 
@@ -33,10 +32,10 @@ class TrackBase:
 
     def __init__(
         self,
-        track_id: Optional[str] = None,
+        track_id: str | None = None,
         confirm_hits: int = 3,
         max_coast: int = 15,
-        confirm_window: Optional[int] = None,
+        confirm_window: int | None = None,
         tentative_delete_misses: int = 3,
         confirmed_coast_misses: int = 5,
         coast_reconfirm_hits: int = 2,
@@ -60,8 +59,8 @@ class TrackBase:
         self._coast_reconfirm = coast_reconfirm_hits
 
         # M-of-N sliding window
-        self._confirm_window: Optional[int] = confirm_window
-        self._hit_window: Optional[deque] = None
+        self._confirm_window: int | None = confirm_window
+        self._hit_window: deque | None = None
         if confirm_window is not None and confirm_window > 0:
             self._hit_window = deque(maxlen=confirm_window)
             self._hit_window.append(True)  # Initial detection counts as a hit

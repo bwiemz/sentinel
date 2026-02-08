@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
@@ -34,13 +33,13 @@ THREAT_CRITICAL = "CRITICAL"
 class EnhancedFusedTrack(FusedTrack):
     """Fused track with multi-sensor metadata and threat classification."""
 
-    thermal_track: Optional[ThermalTrack] = None
-    quantum_radar_track: Optional[RadarTrack] = None
-    correlated_detection: Optional[CorrelatedDetection] = None
+    thermal_track: ThermalTrack | None = None
+    quantum_radar_track: RadarTrack | None = None
+    correlated_detection: CorrelatedDetection | None = None
     radar_bands_detected: list[str] = field(default_factory=list)
     thermal_bands_detected: list[str] = field(default_factory=list)
-    temperature_k: Optional[float] = None
-    qi_advantage_db: Optional[float] = None
+    temperature_k: float | None = None
+    qi_advantage_db: float | None = None
     has_quantum_confirmation: bool = False
     is_stealth_candidate: bool = False
     is_hypersonic_candidate: bool = False
@@ -61,17 +60,19 @@ class EnhancedFusedTrack(FusedTrack):
 
     def to_dict(self) -> dict:
         d = super().to_dict()
-        d.update({
-            "sensor_count": self.sensor_count,
-            "temperature_k": self.temperature_k,
-            "qi_advantage_db": self.qi_advantage_db,
-            "has_quantum_confirmation": self.has_quantum_confirmation,
-            "is_stealth_candidate": self.is_stealth_candidate,
-            "is_hypersonic_candidate": self.is_hypersonic_candidate,
-            "threat_level": self.threat_level,
-            "radar_bands": self.radar_bands_detected,
-            "thermal_bands": self.thermal_bands_detected,
-        })
+        d.update(
+            {
+                "sensor_count": self.sensor_count,
+                "temperature_k": self.temperature_k,
+                "qi_advantage_db": self.qi_advantage_db,
+                "has_quantum_confirmation": self.has_quantum_confirmation,
+                "is_stealth_candidate": self.is_stealth_candidate,
+                "is_hypersonic_candidate": self.is_hypersonic_candidate,
+                "threat_level": self.threat_level,
+                "radar_bands": self.radar_bands_detected,
+                "thermal_bands": self.thermal_bands_detected,
+            }
+        )
         return d
 
 
@@ -116,9 +117,9 @@ class MultiSensorFusion:
         self,
         camera_tracks: list[Track],
         radar_tracks: list[RadarTrack],
-        thermal_tracks: Optional[list[ThermalTrack]] = None,
-        correlated_detections: Optional[list[CorrelatedDetection]] = None,
-        quantum_radar_tracks: Optional[list[RadarTrack]] = None,
+        thermal_tracks: list[ThermalTrack] | None = None,
+        correlated_detections: list[CorrelatedDetection] | None = None,
+        quantum_radar_tracks: list[RadarTrack] | None = None,
     ) -> list[EnhancedFusedTrack]:
         """Full multi-sensor fusion."""
         if not camera_tracks and not radar_tracks and not thermal_tracks and not quantum_radar_tracks:
@@ -198,7 +199,7 @@ class MultiSensorFusion:
         row_idx, col_idx = linear_sum_assignment(cost)
         matched_thermal: set[int] = set()
 
-        for r, c in zip(row_idx, col_idx):
+        for r, c in zip(row_idx, col_idx, strict=False):
             if cost[r, c] < _INFEASIBLE:
                 fused_tracks[r].thermal_track = thermal_tracks[c]
                 fused_tracks[r].temperature_k = thermal_tracks[c].temperature_k
@@ -212,7 +213,7 @@ class MultiSensorFusion:
 
         return fused_tracks
 
-    def _get_fused_azimuth(self, eft: EnhancedFusedTrack) -> Optional[float]:
+    def _get_fused_azimuth(self, eft: EnhancedFusedTrack) -> float | None:
         """Get the best azimuth estimate for a fused track."""
         if eft.radar_track is not None:
             return eft.radar_track.azimuth_deg
@@ -259,7 +260,7 @@ class MultiSensorFusion:
         row_idx, col_idx = linear_sum_assignment(cost)
         matched: set[int] = set()
 
-        for r, c in zip(row_idx, col_idx):
+        for r, c in zip(row_idx, col_idx, strict=False):
             if cost[r, c] < _INFEASIBLE:
                 fused_tracks[r].quantum_radar_track = quantum_tracks[c]
                 fused_tracks[r].has_quantum_confirmation = True

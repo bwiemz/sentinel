@@ -74,7 +74,6 @@ class TestDetection:
         assert d["class_name"] == "car"
         assert "bbox" in d
 
-
     def test_thermal_detection(self):
         det = Detection(
             sensor_type=SensorType.THERMAL,

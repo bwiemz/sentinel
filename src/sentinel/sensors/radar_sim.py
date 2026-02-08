@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
@@ -16,7 +15,7 @@ from sentinel.core.clock import SystemClock
 from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
-from sentinel.sensors.physics import RCSProfile, radar_snr, _snr_to_pd
+from sentinel.sensors.physics import RCSProfile, _snr_to_pd, radar_snr
 from sentinel.utils.coords import (
     azimuth_deg_to_rad,
     azimuth_rad_to_deg,
@@ -74,13 +73,15 @@ class RadarSimConfig:
         targets = []
         scenario = cfg.get("scenario", {})
         for t in scenario.get("targets", []):
-            targets.append(RadarTarget(
-                target_id=t.get("id", "TGT"),
-                position=np.array(t.get("position", [0, 0]), dtype=float),
-                velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
-                rcs_dbsm=t.get("rcs_dbsm", 10.0),
-                class_name=t.get("class_name", "unknown"),
-            ))
+            targets.append(
+                RadarTarget(
+                    target_id=t.get("id", "TGT"),
+                    position=np.array(t.get("position", [0, 0]), dtype=float),
+                    velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
+                    rcs_dbsm=t.get("rcs_dbsm", 10.0),
+                    class_name=t.get("class_name", "unknown"),
+                )
+            )
         return cls(
             scan_rate_hz=cfg.get("scan_rate_hz", 10.0),
             max_range_m=cfg.get("max_range_m", 10000.0),
@@ -108,7 +109,7 @@ class RadarSimulator(AbstractSensor):
         seed: Optional RNG seed for reproducibility.
     """
 
-    def __init__(self, config: RadarSimConfig, seed: Optional[int] = None):
+    def __init__(self, config: RadarSimConfig, seed: int | None = None):
         self._config = config
         self._rng = np.random.RandomState(seed)
         self._clock = SystemClock()
@@ -133,7 +134,7 @@ class RadarSimulator(AbstractSensor):
         self._connected = False
         logger.info("Radar simulator disconnected after %d scans", self._scan_count)
 
-    def read_frame(self) -> Optional[SensorFrame]:
+    def read_frame(self) -> SensorFrame | None:
         """Generate one radar scan with detections and false alarms."""
         if not self._connected:
             return None
@@ -163,10 +164,7 @@ class RadarSimulator(AbstractSensor):
                 continue
 
             # Range-dependent noise scaling: noise grows with (r / max_range)^2
-            if self._config.range_dependent_noise:
-                range_factor = 1.0 + (r / self._config.max_range_m) ** 2
-            else:
-                range_factor = 1.0
+            range_factor = 1.0 + (r / self._config.max_range_m) ** 2 if self._config.range_dependent_noise else 1.0
 
             # Add measurement noise
             noisy_range = r + self._rng.randn() * self._config.noise_range_m * range_factor
@@ -175,13 +173,15 @@ class RadarSimulator(AbstractSensor):
             noisy_vel = radial_vel + self._rng.randn() * self._config.noise_velocity_mps
             noisy_rcs = target.rcs_dbsm + self._rng.randn() * self._config.noise_rcs_dbsm
 
-            detections.append({
-                "range_m": max(0.0, noisy_range),
-                "azimuth_deg": noisy_az_deg,
-                "velocity_mps": noisy_vel,
-                "rcs_dbsm": noisy_rcs,
-                "target_id": target.target_id,
-            })
+            detections.append(
+                {
+                    "range_m": max(0.0, noisy_range),
+                    "azimuth_deg": noisy_az_deg,
+                    "velocity_mps": noisy_vel,
+                    "rcs_dbsm": noisy_rcs,
+                    "target_id": target.target_id,
+                }
+            )
 
         # False alarms
         detections.extend(self._generate_false_alarms())
@@ -205,9 +205,7 @@ class RadarSimulator(AbstractSensor):
     def remove_target(self, target_id: str) -> None:
         self._config.targets = [t for t in self._config.targets if t.target_id != target_id]
 
-    def _compute_radial_velocity(
-        self, position: np.ndarray, velocity: np.ndarray
-    ) -> float:
+    def _compute_radial_velocity(self, position: np.ndarray, velocity: np.ndarray) -> float:
         """Compute radial (Doppler) velocity component toward the radar."""
         r = np.linalg.norm(position)
         if r < 1e-6:
@@ -223,12 +221,14 @@ class RadarSimulator(AbstractSensor):
         for _ in range(n_fa):
             r = self._rng.uniform(10.0, self._config.max_range_m)
             az = self._rng.uniform(-fov_half_deg, fov_half_deg)
-            alarms.append({
-                "range_m": r,
-                "azimuth_deg": az,
-                "velocity_mps": self._rng.randn() * 5.0,
-                "rcs_dbsm": self._rng.uniform(-10, 20),
-            })
+            alarms.append(
+                {
+                    "range_m": r,
+                    "azimuth_deg": az,
+                    "velocity_mps": self._rng.randn() * 5.0,
+                    "rcs_dbsm": self._rng.uniform(-10, 20),
+                }
+            )
         return alarms
 
 
@@ -253,15 +253,18 @@ class MultiFreqRadarTarget(RadarTarget):
 
     def rcs_at_band(self, band: RadarBand) -> float:
         """RCS in dBsm at the given frequency band."""
-        from sentinel.sensors.physics import RCSProfile
         profile = RCSProfile(x_band_dbsm=self.rcs_dbsm, target_type=self.target_type)
         return profile.rcs_at_band(band)
 
     def detection_probability_at_band(
-        self, band: RadarBand, base_pd: float, t: float = 0.0,
+        self,
+        band: RadarBand,
+        base_pd: float,
+        t: float = 0.0,
     ) -> float:
         """Effective detection probability accounting for plasma attenuation."""
         from sentinel.sensors.physics import plasma_detection_factor
+
         m = self.effective_mach(t)
         factor = plasma_detection_factor(m, band)
         return base_pd * factor
@@ -273,13 +276,15 @@ def radar_frame_to_detections(frame: SensorFrame) -> list[Detection]:
     for d in frame.data:
         az_rad = azimuth_deg_to_rad(d["azimuth_deg"])
         pos = polar_to_cartesian(d["range_m"], az_rad)
-        detections.append(Detection(
-            sensor_type=SensorType.RADAR,
-            timestamp=frame.timestamp,
-            range_m=d["range_m"],
-            azimuth_deg=d["azimuth_deg"],
-            velocity_mps=d["velocity_mps"],
-            rcs_dbsm=d["rcs_dbsm"],
-            position_3d=np.array([pos[0], pos[1], 0.0]),
-        ))
+        detections.append(
+            Detection(
+                sensor_type=SensorType.RADAR,
+                timestamp=frame.timestamp,
+                range_m=d["range_m"],
+                azimuth_deg=d["azimuth_deg"],
+                velocity_mps=d["velocity_mps"],
+                rcs_dbsm=d["rcs_dbsm"],
+                position_3d=np.array([pos[0], pos[1], 0.0]),
+            )
+        )
     return detections

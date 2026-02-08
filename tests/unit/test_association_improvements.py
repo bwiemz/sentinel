@@ -1,8 +1,6 @@
 """Tests for association improvements: velocity gating, cascaded, config wiring."""
 
 import numpy as np
-import pytest
-from omegaconf import OmegaConf
 
 from sentinel.core.types import Detection, SensorType, TrackState
 from sentinel.tracking.association import HungarianAssociator
@@ -51,7 +49,7 @@ class TestCascadedCameraAssociation:
         # Create two tracks at the same position
         det = _camera_det(100, 100, 200, 200)
         t_tentative = Track(det, confirm_hits=10)  # stays tentative
-        t_confirmed = Track(det, confirm_hits=1)   # immediately TENTATIVE (needs 1 more hit)
+        t_confirmed = Track(det, confirm_hits=1)  # immediately TENTATIVE (needs 1 more hit)
 
         # Confirm the second track
         t_confirmed._record_hit()  # now confirmed

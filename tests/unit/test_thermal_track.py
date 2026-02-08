@@ -2,13 +2,12 @@
 
 import numpy as np
 import pytest
+from omegaconf import OmegaConf
 
 from sentinel.core.types import Detection, SensorType, TrackState
 from sentinel.tracking.filters import BearingOnlyEKF
 from sentinel.tracking.thermal_track import ThermalTrack
 from sentinel.tracking.thermal_track_manager import ThermalTrackManager
-from omegaconf import OmegaConf
-
 
 # === BearingOnlyEKF ===
 
@@ -168,11 +167,13 @@ class TestThermalTrack:
 
 @pytest.fixture
 def thermal_config():
-    return OmegaConf.create({
-        "filter": {"dt": 0.033, "assumed_initial_range_m": 10000.0},
-        "association": {"gate_threshold": 9.21},
-        "track_management": {"confirm_hits": 3, "max_coast_frames": 10, "max_tracks": 50},
-    })
+    return OmegaConf.create(
+        {
+            "filter": {"dt": 0.033, "assumed_initial_range_m": 10000.0},
+            "association": {"gate_threshold": 9.21},
+            "track_management": {"confirm_hits": 3, "max_coast_frames": 10, "max_tracks": 50},
+        }
+    )
 
 
 class TestThermalTrackManager:

@@ -1,7 +1,5 @@
 """Tests for physics models: RCS profiles, plasma sheath, thermal signatures."""
 
-import math
-
 import pytest
 
 from sentinel.core.types import RadarBand, TargetType, ThermalBand
@@ -13,7 +11,6 @@ from sentinel.sensors.physics import (
     plasma_attenuation_db,
     plasma_detection_factor,
 )
-
 
 # === RCS Profile ===
 
@@ -145,8 +142,7 @@ class TestThermalSignature:
         ts_stealth = ThermalSignature(target_type=TargetType.STEALTH)
         ts_conv = ThermalSignature(target_type=TargetType.CONVENTIONAL)
         # Stealth has cooled exhaust
-        assert ts_stealth.temperature_at_mach(0.9)["engine"] < \
-               ts_conv.temperature_at_mach(0.9)["engine"]
+        assert ts_stealth.temperature_at_mach(0.9)["engine"] < ts_conv.temperature_at_mach(0.9)["engine"]
 
     def test_thermal_contrast_above_ambient(self):
         ts = ThermalSignature(target_type=TargetType.CONVENTIONAL)

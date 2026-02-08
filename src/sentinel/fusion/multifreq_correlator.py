@@ -7,13 +7,11 @@ the same physical target, using range/azimuth proximity gating.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 from sentinel.core.types import Detection, RadarBand
-from sentinel.sensors.physics import combined_detection_probability
 
 
 @dataclass
@@ -69,7 +67,8 @@ class MultiFreqCorrelator:
         self._stealth_rcs_variation_db = stealth_rcs_variation_db
 
     def correlate(
-        self, detections: list[Detection],
+        self,
+        detections: list[Detection],
     ) -> tuple[list[CorrelatedDetection], list[Detection]]:
         """Correlate multi-band detections.
 
@@ -90,13 +89,15 @@ class MultiFreqCorrelator:
             groups = []
             for det in detections:
                 band = det.radar_band or "unknown"
-                groups.append(CorrelatedDetection(
-                    primary_detection=det,
-                    band_detections={band: det},
-                    bands_detected=[band],
-                    combined_pd=0.0,
-                    combined_rcs_dbsm=det.rcs_dbsm or 0.0,
-                ))
+                groups.append(
+                    CorrelatedDetection(
+                        primary_detection=det,
+                        band_detections={band: det},
+                        bands_detected=[band],
+                        combined_pd=0.0,
+                        combined_rcs_dbsm=det.rcs_dbsm or 0.0,
+                    )
+                )
             return groups, []
 
         # Select primary band (highest frequency with detections)
@@ -137,7 +138,7 @@ class MultiFreqCorrelator:
             # Hungarian assignment
             row_idx, col_idx = linear_sum_assignment(cost)
             matched_cols = set()
-            for r, c in zip(row_idx, col_idx):
+            for r, c in zip(row_idx, col_idx, strict=False):
                 if cost[r, c] < 1e4:
                     groups[r][sec_band] = sec_dets[c]
                     matched_cols.add(c)

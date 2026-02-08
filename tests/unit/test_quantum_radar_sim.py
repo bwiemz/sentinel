@@ -1,10 +1,9 @@
 """Tests for quantum illumination radar simulator."""
 
 import numpy as np
-import pytest
 from omegaconf import OmegaConf
 
-from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
+from sentinel.core.types import Detection, SensorType, TargetType
 from sentinel.sensors.physics import ReceiverType
 from sentinel.sensors.quantum_radar_sim import (
     QuantumRadarConfig,

@@ -1,9 +1,5 @@
 """Tests for camera adapter."""
 
-import numpy as np
-import pytest
-
-from sentinel.core.types import SensorType
 from sentinel.sensors.camera import CameraAdapter
 
 

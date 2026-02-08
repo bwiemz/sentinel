@@ -34,9 +34,7 @@ class RadarAssociator:
         self._velocity_gate = velocity_gate_mps
         self._cascaded = cascaded
 
-    def associate(
-        self, tracks: list[RadarTrack], detections: list[Detection]
-    ) -> AssociationResult:
+    def associate(self, tracks: list[RadarTrack], detections: list[Detection]) -> AssociationResult:
         """Optimal assignment between radar tracks and detections."""
         if not tracks or not detections:
             return AssociationResult(
@@ -101,7 +99,7 @@ class RadarAssociator:
         unmatched_t = set(track_indices)
         unmatched_d = set(det_list)
 
-        for r, c in zip(row_idx, col_idx):
+        for r, c in zip(row_idx, col_idx, strict=False):
             if cost[r, c] < INFEASIBLE:
                 matched.append((track_indices[r], det_list[c]))
                 unmatched_t.discard(track_indices[r])
@@ -113,37 +111,25 @@ class RadarAssociator:
             unmatched_detections=sorted(unmatched_d),
         )
 
-    def _cascaded_associate(
-        self, tracks: list[RadarTrack], detections: list[Detection]
-    ) -> AssociationResult:
+    def _cascaded_associate(self, tracks: list[RadarTrack], detections: list[Detection]) -> AssociationResult:
         """Two-pass cascaded association: confirmed first, then others."""
-        confirmed_idx = [
-            i for i, t in enumerate(tracks) if t.state == TrackState.CONFIRMED
-        ]
-        other_idx = [
-            i for i, t in enumerate(tracks) if t.state != TrackState.CONFIRMED
-        ]
+        confirmed_idx = [i for i, t in enumerate(tracks) if t.state == TrackState.CONFIRMED]
+        other_idx = [i for i, t in enumerate(tracks) if t.state != TrackState.CONFIRMED]
 
         # Pass 1: confirmed tracks
         result1 = self._single_pass(tracks, detections, confirmed_idx)
         remaining_dets = set(result1.unmatched_detections)
 
         # Pass 2: tentative/coasting tracks with remaining detections
-        result2 = self._single_pass(
-            tracks, detections, other_idx, available_dets=remaining_dets
-        )
+        result2 = self._single_pass(tracks, detections, other_idx, available_dets=remaining_dets)
 
         return AssociationResult(
             matched_pairs=result1.matched_pairs + result2.matched_pairs,
-            unmatched_tracks=sorted(
-                set(result1.unmatched_tracks) | set(result2.unmatched_tracks)
-            ),
+            unmatched_tracks=sorted(set(result1.unmatched_tracks) | set(result2.unmatched_tracks)),
             unmatched_detections=sorted(set(result2.unmatched_detections)),
         )
 
-    def _build_cost_matrix(
-        self, tracks: list[RadarTrack], detections: list[Detection]
-    ) -> np.ndarray:
+    def _build_cost_matrix(self, tracks: list[RadarTrack], detections: list[Detection]) -> np.ndarray:
         """Cost matrix using Mahalanobis distance in polar space."""
         N = len(tracks)
         M = len(detections)

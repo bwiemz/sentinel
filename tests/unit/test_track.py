@@ -1,7 +1,6 @@
 """Tests for Track class and state machine."""
 
 import numpy as np
-import pytest
 
 from sentinel.core.types import Detection, SensorType, TrackState
 from sentinel.tracking.track import Track

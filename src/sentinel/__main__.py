@@ -24,17 +24,20 @@ def main() -> int:
         description="SENTINEL - Advanced Multi-Sensor Tracking System",
     )
     parser.add_argument(
-        "--config", "-c",
+        "--config",
+        "-c",
         default="config/default.yaml",
         help="Path to configuration YAML file (default: config/default.yaml)",
     )
     parser.add_argument(
-        "--source", "-s",
+        "--source",
+        "-s",
         default=None,
         help="Override camera source (0=USB, path=video file, rtsp://=stream)",
     )
     parser.add_argument(
-        "--model", "-m",
+        "--model",
+        "-m",
         default=None,
         help="Override YOLO model path (e.g. yolov8s.pt, yolov8m.pt)",
     )
@@ -55,14 +58,34 @@ def main() -> int:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Set logging level",
     )
+    parser.add_argument(
+        "--validate-config",
+        action="store_true",
+        default=False,
+        help="Validate config against Pydantic schema before starting",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help="Path to log file (default: no file logging)",
+    )
+    parser.add_argument(
+        "--log-json",
+        action="store_true",
+        default=False,
+        help="Output logs as JSON instead of human-readable",
+    )
     args = parser.parse_args()
 
     # Load config
     config = SentinelConfig(args.config)
     try:
-        cfg = config.load()
+        cfg = config.load(validate=args.validate_config)
     except FileNotFoundError:
         print(f"Error: Config file not found: {args.config}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Error: Config validation failed:\n{e}", file=sys.stderr)
         return 1
 
     # Apply CLI overrides
@@ -83,7 +106,9 @@ def main() -> int:
 
     # Setup logging
     log_level = args.log_level or cfg.sentinel.system.get("log_level", "INFO")
-    setup_logging(log_level)
+    log_file = args.log_file or cfg.sentinel.system.get("log_file", None)
+    log_json = args.log_json or cfg.sentinel.system.get("log_json", False)
+    setup_logging(log_level, log_file=log_file, log_json=log_json)
 
     # Run pipeline
     pipeline = SentinelPipeline(cfg)
