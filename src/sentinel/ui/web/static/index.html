@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SENTINEL - Web Dashboard</title>
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+  <!-- Header -->
+  <header id="header">
+    <div class="header-left">
+      <span class="logo">SENTINEL</span>
+      <span class="subtitle">Multi-Sensor Tracking System</span>
+    </div>
+    <div class="header-right">
+      <span id="ws-status" class="ws-indicator disconnected">OFFLINE</span>
+      <span id="header-time" class="header-time">--:--:--</span>
+    </div>
+  </header>
+
+  <!-- Main grid -->
+  <main id="dashboard">
+    <!-- Row 1: Tactical Map + Track Table / Threat Panel -->
+    <section id="tactical-map" class="panel">
+      <div class="panel-header">TACTICAL MAP</div>
+      <div class="panel-body">
+        <canvas id="ppi-canvas"></canvas>
+      </div>
+    </section>
+
+    <div class="right-stack">
+      <section id="track-table" class="panel">
+        <div class="panel-header">TRACK TABLE</div>
+        <div class="panel-body">
+          <table id="tracks-table">
+            <thead>
+              <tr>
+                <th data-sort="id">ID</th>
+                <th data-sort="type">TYPE</th>
+                <th data-sort="state">STATE</th>
+                <th data-sort="range">RNG (km)</th>
+                <th data-sort="azimuth">AZ (&deg;)</th>
+                <th data-sort="velocity">VEL (m/s)</th>
+                <th data-sort="score">SCORE</th>
+                <th data-sort="threat">THREAT</th>
+              </tr>
+            </thead>
+            <tbody id="tracks-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="threat-panel" class="panel">
+        <div class="panel-header">THREAT SUMMARY</div>
+        <div class="panel-body" id="threat-body">
+          <div class="threat-cards" id="threat-cards"></div>
+          <div class="threat-details" id="threat-details"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Row 2: Sensor Status + Performance -->
+    <section id="sensor-panel" class="panel">
+      <div class="panel-header">SENSOR STATUS</div>
+      <div class="panel-body" id="sensor-body"></div>
+    </section>
+
+    <section id="metrics-panel" class="panel">
+      <div class="panel-header">PERFORMANCE</div>
+      <div class="panel-body" id="metrics-body">
+        <div class="metrics-top">
+          <div class="fps-display">
+            <span class="fps-value" id="fps-value">--</span>
+            <span class="fps-label">FPS</span>
+          </div>
+          <div class="uptime-display">
+            <span class="uptime-label">UPTIME</span>
+            <span class="uptime-value" id="uptime-value">--:--:--</span>
+          </div>
+          <div class="track-counts" id="track-counts"></div>
+        </div>
+        <div class="latency-bars" id="latency-bars"></div>
+      </div>
+    </section>
+
+    <!-- Row 3: HUD Feed -->
+    <section id="hud-panel" class="panel full-width">
+      <div class="panel-header">
+        HUD VIDEO FEED
+        <button id="hud-toggle" class="hud-toggle">HIDE</button>
+      </div>
+      <div class="panel-body" id="hud-body">
+        <img id="hud-feed" alt="HUD Feed">
+      </div>
+    </section>
+  </main>
+
+  <!-- CRT scanline overlay -->
+  <div class="scanline-overlay"></div>
+
+  <!-- Scripts -->
+  <script src="/static/js/tactical_map.js"></script>
+  <script src="/static/js/sensor_panel.js"></script>
+  <script src="/static/js/track_table.js"></script>
+  <script src="/static/js/threat_panel.js"></script>
+  <script src="/static/js/metrics_panel.js"></script>
+  <script src="/static/js/hud_feed.js"></script>
+  <script src="/static/js/main.js"></script>
+</body>
+</html>

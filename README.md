@@ -50,6 +50,7 @@ Four independent sensor paths run at their native rates. Tracks are fused by ang
 - **Statistical fusion**: Mahalanobis track-to-track distance replaces angular heuristics for cross-sensor correlation, with camera-to-world coordinate projection
 - **Threat classification**: CRITICAL (hypersonic, quantum-confirmed stealth), HIGH (stealth, quantum-only), MEDIUM (multi-sensor conventional), LOW (single-sensor)
 - **Military HUD**: Real-time overlay with track boxes, velocity vectors, targeting reticle, radar/thermal/quantum blips, threat badges, and stealth/hypersonic alert banners
+- **Web dashboard**: Real-time browser-based monitoring via FastAPI/WebSocket -- tactical PPI radar scope, sortable track table, threat cards, per-stage latency bars, MJPEG HUD video feed. Military dark theme, vanilla JS (no build step)
 
 ## Quick Start
 
@@ -73,6 +74,10 @@ sentinel --source path/to/video.mp4
 
 # Override YOLO model and device
 sentinel --model yolov8s.pt --device cuda:0
+
+# Enable web dashboard (requires web extras)
+pip install -e ".[web]"
+sentinel --web
 ```
 
 ### Test
@@ -81,7 +86,7 @@ sentinel --model yolov8s.pt --device cuda:0
 pytest tests/ -v
 ```
 
-774 tests covering all subsystems.
+826 tests covering all subsystems.
 
 ## Configuration
 
@@ -103,8 +108,9 @@ All settings live in `config/default.yaml` under the `sentinel:` namespace. Key 
 | `tracking.quantum_radar` | EKF params for quantum radar tracking |
 | `fusion` | Azimuth gates, temporal alignment, statistical distance, threat thresholds |
 | `ui.hud` | HUD colors, overlay alpha, scanline effect |
+| `ui.web` | Web dashboard: host, port, update rate, video FPS |
 
-Enable multi-freq radar, thermal, and quantum radar by setting `enabled: true` in their respective sections. When disabled, the system runs in camera-only or camera+single-radar mode (backward compatible).
+Enable multi-freq radar, thermal, and quantum radar by setting `enabled: true` in their respective sections. When disabled, the system runs in camera-only or camera+single-radar mode (backward compatible). The web dashboard is also disabled by default -- enable with `ui.web.enabled: true` or the `--web` CLI flag.
 
 ## Project Structure
 
@@ -154,9 +160,15 @@ sentinel/
       renderer.py             # HUD compositor
       elements.py             # Drawing primitives (boxes, blips, alerts)
       styles.py               # Colors, fonts, visual config
+    ui/web/
+      state_buffer.py         # Thread-safe pipeline→web state transfer
+      mjpeg.py                # JPEG frame encoder
+      server.py               # FastAPI app (REST, WebSocket, MJPEG)
+      bridge.py               # WebDashboard lifecycle manager
+      static/                 # Frontend: HTML, CSS, JS (vanilla, no build step)
   tests/
-    unit/test_*.py            # 756 unit tests
-    integration/test_*.py     # 18 integration tests
+    unit/test_*.py            # 806 unit tests
+    integration/test_*.py     # 20 integration tests
 ```
 
 ## Physics Models
@@ -244,7 +256,8 @@ P_total = 1 - product(1 - P_i)
 | 6 | Quantum illumination radar for enhanced stealth detection | -- |
 | 7 | Algorithm optimization: CA-KF, IMM, 3D/Doppler EKF, cascaded association | `e3d3947` |
 | 8 | Production hardening: error handling, validation, logging, CI/CD | `ca46515` |
-| 9 | Association & fusion integrity: JPDA, temporal alignment, statistical distance, NIS monitoring | -- |
+| 9 | Association & fusion integrity: JPDA, temporal alignment, statistical distance, NIS monitoring | `636d08b` |
+| 10 | Real-time web dashboard: FastAPI, WebSocket, PPI radar scope, threat cards, MJPEG feed | -- |
 
 ## Dependencies
 
@@ -253,6 +266,7 @@ P_total = 1 - product(1 - P_i)
 - OpenCV (camera I/O, HUD rendering)
 - Ultralytics (YOLOv8)
 - OmegaConf + PyYAML (configuration)
+- FastAPI, uvicorn, websockets (web dashboard -- optional `[web]` extras)
 
 ## License
 

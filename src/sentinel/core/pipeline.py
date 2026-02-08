@@ -173,6 +173,17 @@ class SentinelPipeline:
         if self._multifreq_radar_enabled or self._thermal_enabled or self._quantum_radar_enabled:
             self._init_multi_sensor_fusion(config)
 
+        # --- Web Dashboard (Phase 10) ---
+        web_cfg = config.sentinel.ui.get("web", {})
+        self._web_dashboard = None
+        if web_cfg.get("enabled", False):
+            try:
+                from sentinel.ui.web import WebDashboard
+
+                self._web_dashboard = WebDashboard(web_cfg)
+            except ImportError:
+                logger.warning("Web dependencies not installed. Install with: pip install sentinel[web]")
+
     def _init_radar(self, config: DictConfig) -> None:
         """Initialize radar simulator, radar tracker, and fusion module."""
         from sentinel.fusion.track_fusion import TrackFusion
@@ -380,6 +391,9 @@ class SentinelPipeline:
         if self._quantum_radar_enabled:
             logger.info("Quantum illumination radar enabled.")
 
+        if self._web_dashboard is not None:
+            self._web_dashboard.start()
+
         self._running = True
         logger.info("Pipeline running. Press 'q' to quit.")
 
@@ -582,6 +596,13 @@ class SentinelPipeline:
                     logger.info("Quit requested.")
                     self._running = False
 
+            # 7. Publish to web dashboard
+            if self._web_dashboard is not None:
+                try:
+                    self._web_dashboard.publish(self)
+                except Exception:
+                    logger.debug("Web dashboard publish failed", exc_info=True)
+
     def _update_timing(self, key: str, value_ms: float) -> None:
         """Update an EMA timing measurement."""
         a = self._timing_alpha
@@ -646,6 +667,13 @@ class SentinelPipeline:
 
     def _shutdown(self) -> None:
         logger.info("Shutting down pipeline...")
+
+        # Stop web dashboard first (non-blocking)
+        if self._web_dashboard is not None:
+            try:
+                self._web_dashboard.stop()
+            except Exception:
+                logger.debug("Web dashboard stop failed", exc_info=True)
         self._running = False
 
         # Disconnect each sensor in isolation so one failure doesn't prevent others

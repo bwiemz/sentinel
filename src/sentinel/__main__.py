@@ -75,6 +75,12 @@ def main() -> int:
         default=False,
         help="Output logs as JSON instead of human-readable",
     )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        default=False,
+        help="Enable web dashboard (overrides config, requires pip install sentinel[web])",
+    )
     args = parser.parse_args()
 
     # Load config
@@ -103,6 +109,8 @@ def main() -> int:
         config.override("sentinel.detection.confidence", args.confidence)
     if args.device is not None:
         config.override("sentinel.detection.device", args.device)
+    if args.web:
+        config.override("sentinel.ui.web.enabled", True)
 
     # Setup logging
     log_level = args.log_level or cfg.sentinel.system.get("log_level", "INFO")
