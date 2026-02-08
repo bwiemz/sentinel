@@ -257,7 +257,7 @@ P_total = 1 - product(1 - P_i)
 | 7 | Algorithm optimization: CA-KF, IMM, 3D/Doppler EKF, cascaded association | `e3d3947` |
 | 8 | Production hardening: error handling, validation, logging, CI/CD | `ca46515` |
 | 9 | Association & fusion integrity: JPDA, temporal alignment, statistical distance, NIS monitoring | `636d08b` |
-| 10 | Real-time web dashboard: FastAPI, WebSocket, PPI radar scope, threat cards, MJPEG feed | -- |
+| 10 | Real-time web dashboard: FastAPI, WebSocket, PPI radar scope, threat cards, MJPEG feed | `86e769c` |
 
 ## Dependencies
 
