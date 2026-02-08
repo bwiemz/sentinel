@@ -4,6 +4,19 @@
 
 Real-time multi-sensor tracking system that fuses camera, multi-frequency radar, thermal imaging, and quantum illumination radar to detect and classify targets -- including stealth aircraft and hypersonic vehicles.
 
+## License & Usage
+
+This repository is publicly available **for learning and reference only**.
+
+- You may **view and study** the code for educational purposes.
+- You may **NOT copy, reuse, redistribute, or modify** any part of this
+  repository without explicit permission.
+- **Commercial use is strictly prohibited** without contacting the author
+  and receiving written authorization.
+
+If you would like permission to use any part of this project, please
+contact me directly.
+
 ## Architecture
 
 ```
