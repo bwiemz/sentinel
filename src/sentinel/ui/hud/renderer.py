@@ -33,6 +33,8 @@ class HUDRenderer:
         system_status: dict,
         radar_tracks: Optional[list] = None,
         fused_tracks: Optional[list] = None,
+        thermal_tracks: Optional[list] = None,
+        enhanced_fused_tracks: Optional[list] = None,
     ) -> np.ndarray:
         """Composite full HUD overlay onto camera frame.
 
@@ -42,12 +44,18 @@ class HUDRenderer:
             detections: Raw detections from current frame.
             system_status: System metrics dict (fps, counts, etc.).
             radar_tracks: Optional list of RadarTrack objects.
-            fused_tracks: Optional list of FusedTrack objects.
+            fused_tracks: Optional list of FusedTrack objects (legacy).
+            thermal_tracks: Optional list of ThermalTrack objects.
+            enhanced_fused_tracks: Optional list of EnhancedFusedTrack objects.
 
         Returns:
             Frame with HUD overlay composited.
         """
         display = frame.copy()
+        h, w = display.shape[:2]
+
+        # Use enhanced fused tracks if available, fall back to legacy
+        active_fused = enhanced_fused_tracks or fused_tracks
 
         # Background effects
         self._elements.draw_scanlines(display)
@@ -57,8 +65,8 @@ class HUDRenderer:
 
         # Build set of camera track IDs that are fused (dual-sensor)
         fused_cam_ids: set[str] = set()
-        if fused_tracks:
-            for ft in fused_tracks:
+        if active_fused:
+            for ft in active_fused:
                 if ft.is_dual_sensor and ft.camera_track is not None:
                     fused_cam_ids.add(ft.camera_track.track_id)
 
@@ -76,9 +84,8 @@ class HUDRenderer:
             self._elements.draw_reticle(display, primary)
 
         # Radar blips
-        if fused_tracks:
-            h, w = display.shape[:2]
-            for ft in fused_tracks:
+        if active_fused:
+            for ft in active_fused:
                 if ft.radar_track is not None:
                     self._elements.draw_radar_blip(
                         display,
@@ -89,7 +96,6 @@ class HUDRenderer:
                         is_fused=ft.is_dual_sensor,
                     )
         elif radar_tracks:
-            h, w = display.shape[:2]
             for rt in radar_tracks:
                 if rt.is_alive:
                     self._elements.draw_radar_blip(
@@ -100,12 +106,53 @@ class HUDRenderer:
                         image_width=w,
                     )
 
+        # Thermal blips
+        if enhanced_fused_tracks:
+            has_stealth = False
+            has_hypersonic = False
+            for eft in enhanced_fused_tracks:
+                if eft.thermal_track is not None:
+                    self._elements.draw_thermal_blip(
+                        display,
+                        azimuth_deg=eft.thermal_track.azimuth_deg,
+                        temperature_k=eft.thermal_track.temperature_k,
+                        track_id=eft.thermal_track.track_id,
+                        image_width=w,
+                        is_fused=eft.sensor_count >= 2,
+                    )
+                # Threat indicators
+                self._elements.draw_threat_indicator(display, eft, w)
+                if eft.is_stealth_candidate:
+                    has_stealth = True
+                if eft.is_hypersonic_candidate or (
+                    eft.temperature_k is not None and eft.temperature_k > 1500
+                ):
+                    has_hypersonic = True
+
+            # Alert banners
+            if has_hypersonic:
+                self._elements.draw_hypersonic_alert(display)
+            if has_stealth:
+                self._elements.draw_stealth_alert(display)
+        elif thermal_tracks:
+            for tt in thermal_tracks:
+                if tt.is_alive:
+                    self._elements.draw_thermal_blip(
+                        display,
+                        azimuth_deg=tt.azimuth_deg,
+                        temperature_k=tt.temperature_k,
+                        track_id=tt.track_id,
+                        image_width=w,
+                    )
+
         # Frame elements
         self._elements.draw_header_bar(display)
         self._elements.draw_crosshair_overlay(display)
         self._elements.draw_status_panel(display, system_status)
-        if radar_tracks is not None or fused_tracks is not None:
+        if radar_tracks is not None or active_fused is not None:
             self._elements.draw_radar_status_line(display, system_status)
+        if thermal_tracks is not None or enhanced_fused_tracks is not None:
+            self._elements.draw_thermal_status_line(display, system_status)
         self._elements.draw_track_list_panel(display, alive_tracks)
         self._elements.draw_border_frame(display)
 

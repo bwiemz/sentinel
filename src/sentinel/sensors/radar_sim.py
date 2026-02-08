@@ -13,7 +13,7 @@ from typing import Optional
 import numpy as np
 
 from sentinel.core.clock import SystemClock
-from sentinel.core.types import Detection, SensorType
+from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
 from sentinel.utils.coords import (
@@ -213,6 +213,41 @@ class RadarSimulator(AbstractSensor):
                 "rcs_dbsm": self._rng.uniform(-10, 20),
             })
         return alarms
+
+
+@dataclass
+class MultiFreqRadarTarget(RadarTarget):
+    """Radar target with frequency-dependent RCS and speed-dependent plasma effects.
+
+    Extends RadarTarget for backward compatibility. When used with the
+    multi-frequency radar simulator, provides per-band RCS and plasma-adjusted
+    detection probability.
+    """
+
+    target_type: TargetType = TargetType.CONVENTIONAL
+    mach: float = 0.0  # 0 = compute from velocity at runtime
+
+    def effective_mach(self, t: float = 0.0, speed_of_sound: float = 343.0) -> float:
+        """Compute Mach number from velocity magnitude, or return preset."""
+        if self.mach > 0:
+            return self.mach
+        speed = float(np.linalg.norm(self.velocity))
+        return speed / speed_of_sound
+
+    def rcs_at_band(self, band: RadarBand) -> float:
+        """RCS in dBsm at the given frequency band."""
+        from sentinel.sensors.physics import RCSProfile
+        profile = RCSProfile(x_band_dbsm=self.rcs_dbsm, target_type=self.target_type)
+        return profile.rcs_at_band(band)
+
+    def detection_probability_at_band(
+        self, band: RadarBand, base_pd: float, t: float = 0.0,
+    ) -> float:
+        """Effective detection probability accounting for plasma attenuation."""
+        from sentinel.sensors.physics import plasma_detection_factor
+        m = self.effective_mach(t)
+        factor = plasma_detection_factor(m, band)
+        return base_pd * factor
 
 
 def radar_frame_to_detections(frame: SensorFrame) -> list[Detection]:

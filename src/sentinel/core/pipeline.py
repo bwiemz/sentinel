@@ -87,6 +87,31 @@ class SentinelPipeline:
         if self._radar_enabled:
             self._init_radar(config)
 
+        # --- Multi-Frequency Radar (Phase 5) ---
+        self._multifreq_radar_enabled = config.sentinel.sensors.get("multifreq_radar", {}).get("enabled", False)
+        self._multifreq_radar = None
+        self._multifreq_correlator = None
+        self._latest_correlated_detections: list = []
+
+        if self._multifreq_radar_enabled:
+            self._init_multifreq_radar(config)
+
+        # --- Thermal (Phase 5) ---
+        self._thermal_enabled = config.sentinel.sensors.get("thermal", {}).get("enabled", False)
+        self._thermal = None
+        self._thermal_track_manager = None
+        self._latest_thermal_detections: list[Detection] = []
+        self._latest_thermal_tracks: list = []
+
+        if self._thermal_enabled:
+            self._init_thermal(config)
+
+        # --- Multi-Sensor Fusion (Phase 5) ---
+        self._multi_sensor_fusion = None
+        self._latest_enhanced_fused: list = []
+        if self._multifreq_radar_enabled or self._thermal_enabled:
+            self._init_multi_sensor_fusion(config)
+
     def _init_radar(self, config: DictConfig) -> None:
         """Initialize radar simulator, radar tracker, and fusion module."""
         from sentinel.sensors.radar_sim import RadarSimConfig, RadarSimulator
@@ -126,6 +151,81 @@ class SentinelPipeline:
 
         logger.info("Radar subsystem initialized (simulator mode, %.0f Hz)", radar_cfg.get("scan_rate_hz", 10))
 
+    def _init_multifreq_radar(self, config: DictConfig) -> None:
+        """Initialize multi-frequency radar simulator and correlator."""
+        from sentinel.sensors.multifreq_radar_sim import MultiFreqRadarConfig, MultiFreqRadarSimulator
+        from sentinel.fusion.multifreq_correlator import MultiFreqCorrelator
+
+        mfr_cfg = config.sentinel.sensors.multifreq_radar
+        mfr_config = MultiFreqRadarConfig.from_omegaconf(mfr_cfg)
+        self._multifreq_radar = MultiFreqRadarSimulator(mfr_config)
+
+        corr_cfg = config.sentinel.get("fusion", {}).get("multifreq_correlation", {})
+        self._multifreq_correlator = MultiFreqCorrelator(
+            range_gate_m=corr_cfg.get("range_gate_m", 500.0),
+            azimuth_gate_deg=corr_cfg.get("azimuth_gate_deg", 3.0),
+        )
+
+        # Also set up radar tracking if not already enabled via single radar
+        if not self._radar_enabled:
+            from sentinel.tracking.radar_track_manager import RadarTrackManager
+            radar_tracking = config.sentinel.get("tracking", {}).get("radar", {})
+            radar_track_cfg = OmegaConf.create({
+                "filter": {"dt": 1.0 / mfr_cfg.get("scan_rate_hz", 10), "type": "ekf"},
+                "association": {"gate_threshold": radar_tracking.get("association", {}).get("gate_threshold", 9.21)},
+                "track_management": {
+                    "confirm_hits": radar_tracking.get("track_management", {}).get("confirm_hits", 3),
+                    "max_coast_frames": radar_tracking.get("track_management", {}).get("max_coast_frames", 5),
+                    "max_tracks": radar_tracking.get("track_management", {}).get("max_tracks", 50),
+                },
+            })
+            self._radar_track_manager = RadarTrackManager(radar_track_cfg)
+
+        logger.info("Multi-frequency radar subsystem initialized (bands: %s)", mfr_cfg.get("bands", []))
+
+    def _init_thermal(self, config: DictConfig) -> None:
+        """Initialize thermal simulator and thermal track manager."""
+        from sentinel.sensors.thermal_sim import ThermalSimConfig, ThermalSimulator
+        from sentinel.tracking.thermal_track_manager import ThermalTrackManager
+
+        thm_cfg = config.sentinel.sensors.thermal
+        thm_config = ThermalSimConfig.from_omegaconf(thm_cfg)
+        self._thermal = ThermalSimulator(thm_config)
+
+        thermal_tracking = config.sentinel.get("tracking", {}).get("thermal", {})
+        thermal_track_cfg = OmegaConf.create({
+            "filter": {
+                "dt": thermal_tracking.get("filter", {}).get("dt", 0.033),
+                "assumed_initial_range_m": thermal_tracking.get("filter", {}).get("assumed_initial_range_m", 10000.0),
+            },
+            "association": {
+                "gate_threshold": thermal_tracking.get("association", {}).get("gate_threshold", 9.21),
+            },
+            "track_management": {
+                "confirm_hits": thermal_tracking.get("track_management", {}).get("confirm_hits", 3),
+                "max_coast_frames": thermal_tracking.get("track_management", {}).get("max_coast_frames", 10),
+                "max_tracks": thermal_tracking.get("track_management", {}).get("max_tracks", 50),
+            },
+        })
+        self._thermal_track_manager = ThermalTrackManager(thermal_track_cfg)
+
+        logger.info("Thermal subsystem initialized")
+
+    def _init_multi_sensor_fusion(self, config: DictConfig) -> None:
+        """Initialize enhanced multi-sensor fusion."""
+        from sentinel.fusion.multi_sensor_fusion import MultiSensorFusion
+
+        fusion_cfg = config.sentinel.get("fusion", {})
+        cam_cfg = config.sentinel.sensors.camera
+        self._multi_sensor_fusion = MultiSensorFusion(
+            camera_hfov_deg=fusion_cfg.get("camera_hfov_deg", 60.0),
+            image_width_px=cam_cfg.get("width", 1280),
+            azimuth_gate_deg=fusion_cfg.get("azimuth_gate_deg", 5.0),
+            thermal_azimuth_gate_deg=fusion_cfg.get("thermal_azimuth_gate_deg", 3.0),
+        )
+
+        logger.info("Multi-sensor fusion initialized (camera + radar + thermal)")
+
     def run(self) -> None:
         """Main loop: read -> detect -> track -> fuse -> render -> display."""
         logger.info("=" * 60)
@@ -141,11 +241,23 @@ class SentinelPipeline:
             self._radar.connect()
             logger.info("Radar simulator connected.")
 
+        if self._multifreq_radar_enabled and self._multifreq_radar is not None:
+            self._multifreq_radar.connect()
+            logger.info("Multi-frequency radar simulator connected.")
+
+        if self._thermal_enabled and self._thermal is not None:
+            self._thermal.connect()
+            logger.info("Thermal simulator connected.")
+
         logger.info("Warming up detector...")
         self._detector.warmup()
         logger.info("Tracker ready: max %d tracks", self._config.sentinel.tracking.track_management.max_tracks)
         if self._radar_enabled:
             logger.info("Radar tracking + fusion enabled.")
+        if self._multifreq_radar_enabled:
+            logger.info("Multi-frequency radar + correlation enabled.")
+        if self._thermal_enabled:
+            logger.info("Thermal tracking enabled.")
 
         self._running = True
         logger.info("Pipeline running. Press 'q' to quit.")
@@ -159,7 +271,11 @@ class SentinelPipeline:
 
     def _main_loop(self) -> None:
         radar_interval = 1.0 / self._config.sentinel.sensors.radar.get("scan_rate_hz", 10)
+        mfr_interval = 1.0 / self._config.sentinel.sensors.get("multifreq_radar", {}).get("scan_rate_hz", 10)
+        thermal_interval = 1.0 / self._config.sentinel.sensors.get("thermal", {}).get("frame_rate_hz", 30)
         last_radar_time = 0.0
+        last_mfr_time = 0.0
+        last_thermal_time = 0.0
 
         while self._running:
             # 1. Read camera frame
@@ -186,20 +302,43 @@ class SentinelPipeline:
                     self._process_radar_scan()
                     last_radar_time = timestamp
 
-                # 4. Fusion (every camera frame, using latest radar tracks)
-                if self._track_fusion is not None:
-                    self._latest_fused_tracks = self._track_fusion.fuse(
-                        self._latest_tracks,
-                        self._latest_radar_tracks,
-                    )
+            # 3b. Multi-frequency radar scan (if enabled)
+            if self._multifreq_radar_enabled and self._multifreq_radar is not None:
+                if (timestamp - last_mfr_time) >= mfr_interval:
+                    self._process_multifreq_radar_scan()
+                    last_mfr_time = timestamp
+
+            # 3c. Thermal scan (if enabled)
+            if self._thermal_enabled and self._thermal is not None:
+                if (timestamp - last_thermal_time) >= thermal_interval:
+                    self._process_thermal_scan()
+                    last_thermal_time = timestamp
+
+            # 4. Fusion (every camera frame, using latest tracks)
+            if self._multi_sensor_fusion is not None:
+                # Enhanced multi-sensor fusion (Phase 5)
+                self._latest_enhanced_fused = self._multi_sensor_fusion.fuse(
+                    self._latest_tracks,
+                    self._latest_radar_tracks,
+                    self._latest_thermal_tracks if self._thermal_enabled else None,
+                    self._latest_correlated_detections if self._multifreq_radar_enabled else None,
+                )
+            elif self._track_fusion is not None:
+                # Legacy camera+radar fusion (Phase 4)
+                self._latest_fused_tracks = self._track_fusion.fuse(
+                    self._latest_tracks,
+                    self._latest_radar_tracks,
+                )
 
             # 5. Render HUD
             if self._hud is not None:
                 status = self.get_system_status()
                 display = self._hud.render(
                     frame, tracks, detections, status,
-                    radar_tracks=self._latest_radar_tracks if self._radar_enabled else None,
-                    fused_tracks=self._latest_fused_tracks if self._radar_enabled else None,
+                    radar_tracks=self._latest_radar_tracks if self._radar_enabled or self._multifreq_radar_enabled else None,
+                    fused_tracks=self._latest_fused_tracks if self._radar_enabled and not self._multi_sensor_fusion else None,
+                    thermal_tracks=self._latest_thermal_tracks if self._thermal_enabled else None,
+                    enhanced_fused_tracks=self._latest_enhanced_fused if self._multi_sensor_fusion else None,
                 )
             else:
                 display = frame
@@ -224,12 +363,51 @@ class SentinelPipeline:
             self._latest_radar_detections = radar_dets
             self._latest_radar_tracks = self._radar_track_manager.step(radar_dets)
 
+    def _process_multifreq_radar_scan(self) -> None:
+        """Read multi-freq radar, correlate across bands, and track."""
+        from sentinel.sensors.multifreq_radar_sim import multifreq_radar_frame_to_detections
+
+        frame = self._multifreq_radar.read_frame()
+        if frame is None:
+            return
+
+        dets = multifreq_radar_frame_to_detections(frame)
+        self._latest_radar_detections = dets
+
+        # Correlate across frequency bands
+        if self._multifreq_correlator is not None:
+            self._latest_correlated_detections = self._multifreq_correlator.correlate(dets)
+
+        # Feed primary detections into radar tracker
+        if self._radar_track_manager is not None:
+            # Use the primary detection from each correlated group
+            primary_dets = []
+            for cd in self._latest_correlated_detections:
+                primary_dets.append(cd.primary_detection)
+            self._latest_radar_tracks = self._radar_track_manager.step(primary_dets)
+
+    def _process_thermal_scan(self) -> None:
+        """Read thermal frame and track."""
+        from sentinel.sensors.thermal_sim import thermal_frame_to_detections
+
+        frame = self._thermal.read_frame()
+        if frame is None:
+            return
+
+        dets = thermal_frame_to_detections(frame)
+        self._latest_thermal_detections = dets
+        self._latest_thermal_tracks = self._thermal_track_manager.step(dets)
+
     def _shutdown(self) -> None:
         logger.info("Shutting down pipeline...")
         self._running = False
         self._camera.disconnect()
         if self._radar is not None:
             self._radar.disconnect()
+        if self._multifreq_radar is not None:
+            self._multifreq_radar.disconnect()
+        if self._thermal is not None:
+            self._thermal.disconnect()
         cv2.destroyAllWindows()
         logger.info("Pipeline stopped. Final stats:")
         logger.info("  Camera tracks created: %d", len(self._track_manager._tracks) + self._track_manager.track_count)
@@ -237,6 +415,12 @@ class SentinelPipeline:
         if self._radar_enabled and self._radar_track_manager is not None:
             logger.info("  Active radar tracks: %d", self._radar_track_manager.track_count)
             logger.info("  Fused tracks: %d", len(self._latest_fused_tracks))
+        if self._multifreq_radar_enabled:
+            logger.info("  Correlated detections: %d", len(self._latest_correlated_detections))
+        if self._thermal_enabled and self._thermal_track_manager is not None:
+            logger.info("  Active thermal tracks: %d", self._thermal_track_manager.track_count)
+        if self._multi_sensor_fusion is not None:
+            logger.info("  Enhanced fused tracks: %d", len(self._latest_enhanced_fused))
 
     def get_system_status(self) -> dict:
         status = {
@@ -252,6 +436,22 @@ class SentinelPipeline:
             status["radar_detection_count"] = len(self._latest_radar_detections)
             status["radar_track_count"] = self._radar_track_manager.track_count if self._radar_track_manager else 0
             status["fused_track_count"] = len(self._latest_fused_tracks)
+        if self._multifreq_radar_enabled:
+            status["radar_connected"] = self._multifreq_radar.is_connected if self._multifreq_radar else False
+            status["radar_detection_count"] = len(self._latest_radar_detections)
+            status["radar_track_count"] = self._radar_track_manager.track_count if self._radar_track_manager else 0
+            status["correlated_count"] = len(self._latest_correlated_detections)
+        if self._thermal_enabled:
+            status["thermal_connected"] = self._thermal.is_connected if self._thermal else False
+            status["thermal_track_count"] = self._thermal_track_manager.track_count if self._thermal_track_manager else 0
+        if self._multi_sensor_fusion is not None:
+            status["fused_track_count"] = len(self._latest_enhanced_fused)
+            # Threat counts
+            threat_counts: dict[str, int] = {}
+            for eft in self._latest_enhanced_fused:
+                lvl = getattr(eft, "threat_level", "UNKNOWN")
+                threat_counts[lvl] = threat_counts.get(lvl, 0) + 1
+            status["threat_counts"] = threat_counts
         return status
 
     def get_track_snapshot(self) -> list[Track]:

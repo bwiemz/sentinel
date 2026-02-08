@@ -326,3 +326,145 @@ class HUDElements:
             frame, "F", (x2 + 4, y1 + 12),
             self.s.font_face, self.s.font_scale, self.s.color_fused, 1, cv2.LINE_AA,
         )
+
+    # === THERMAL ELEMENTS ===
+
+    def draw_thermal_blip(
+        self,
+        frame: np.ndarray,
+        azimuth_deg: float,
+        temperature_k: float,
+        track_id: str,
+        image_width: int,
+        camera_hfov_deg: float = 60.0,
+        is_fused: bool = False,
+    ) -> None:
+        """Draw a thermal track as a triangle blip with temp label.
+
+        Maps thermal azimuth to horizontal pixel position.
+        """
+        h, w = frame.shape[:2]
+        px_x = int((azimuth_deg / camera_hfov_deg + 0.5) * image_width)
+        px_x = max(0, min(px_x, w - 1))
+        py = h - 80  # Above radar blip region
+
+        color = self.s.color_fused if is_fused else self.s.color_thermal
+        size = 7
+
+        # Triangle shape (pointing up)
+        pts = np.array([
+            [px_x, py - size],
+            [px_x + size, py + size],
+            [px_x - size, py + size],
+        ], np.int32)
+        cv2.polylines(frame, [pts], True, color, 1, cv2.LINE_AA)
+        if is_fused:
+            cv2.fillPoly(frame, [pts], color)
+
+        # Temperature label
+        label = f"{temperature_k:.0f}K"
+        cv2.putText(
+            frame, label, (px_x + 10, py + 4),
+            self.s.font_face, self.s.font_scale_small, color, 1, cv2.LINE_AA,
+        )
+
+    def draw_threat_indicator(
+        self,
+        frame: np.ndarray,
+        fused_track,
+        image_width: int,
+        camera_hfov_deg: float = 60.0,
+    ) -> None:
+        """Draw threat level badge near the fused track position."""
+        threat = getattr(fused_track, "threat_level", "UNKNOWN")
+        if threat == "UNKNOWN":
+            return
+
+        color = self.s.color_for_threat(threat)
+
+        # Determine position from best available source
+        px_x, py = None, None
+        if fused_track.camera_track is not None:
+            bbox = fused_track.camera_track.predicted_bbox
+            if bbox is not None:
+                px_x = int(bbox[2]) + 4
+                py = int(bbox[1]) + 24
+        if px_x is None:
+            az = getattr(fused_track, "azimuth_deg", None)
+            if az is not None:
+                px_x = int((az / camera_hfov_deg + 0.5) * image_width)
+                px_x = max(0, min(px_x, frame.shape[1] - 1))
+                py = frame.shape[0] - 95
+            else:
+                return
+
+        label = f"THR:{threat}"
+        (tw, th), _ = cv2.getTextSize(label, self.s.font_face, self.s.font_scale_small, 1)
+        cv2.rectangle(frame, (px_x - 1, py - th - 2), (px_x + tw + 2, py + 2), self.s.color_panel_bg, -1)
+        cv2.putText(
+            frame, label, (px_x, py),
+            self.s.font_face, self.s.font_scale_small, color, 1, cv2.LINE_AA,
+        )
+
+    def draw_stealth_alert(self, frame: np.ndarray) -> None:
+        """Draw STEALTH DETECTED alert banner."""
+        h, w = frame.shape[:2]
+        label = "! STEALTH DETECTED !"
+        (tw, th), _ = cv2.getTextSize(label, self.s.font_face, self.s.font_scale_large, 1)
+        cx = (w - tw) // 2
+        cy = 55
+
+        # Flashing background
+        pulse = 0.5 + 0.5 * math.sin(time.monotonic() * 6)
+        bg_alpha = 0.4 + 0.3 * pulse
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (cx - 8, cy - th - 4), (cx + tw + 8, cy + 4), self.s.color_stealth, -1)
+        cv2.addWeighted(overlay, bg_alpha, frame, 1 - bg_alpha, 0, frame)
+
+        cv2.putText(
+            frame, label, (cx, cy),
+            self.s.font_face, self.s.font_scale_large, (255, 255, 255), 1, cv2.LINE_AA,
+        )
+
+    def draw_hypersonic_alert(self, frame: np.ndarray) -> None:
+        """Draw HYPERSONIC THREAT alert banner."""
+        h, w = frame.shape[:2]
+        label = "!! HYPERSONIC THREAT !!"
+        (tw, th), _ = cv2.getTextSize(label, self.s.font_face, self.s.font_scale_large, 1)
+        cx = (w - tw) // 2
+        cy = 75
+
+        pulse = 0.5 + 0.5 * math.sin(time.monotonic() * 8)
+        bg_alpha = 0.5 + 0.3 * pulse
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (cx - 8, cy - th - 4), (cx + tw + 8, cy + 4), self.s.color_hypersonic, -1)
+        cv2.addWeighted(overlay, bg_alpha, frame, 1 - bg_alpha, 0, frame)
+
+        cv2.putText(
+            frame, label, (cx, cy),
+            self.s.font_face, self.s.font_scale_large, (255, 255, 255), 1, cv2.LINE_AA,
+        )
+
+    def draw_thermal_status_line(self, frame: np.ndarray, status: dict) -> None:
+        """Draw thermal sensor status in the status panel area."""
+        if not status.get("thermal_connected", False):
+            return
+        y = 158 if status.get("radar_connected", False) else 126
+        text = f"THM: {status.get('thermal_track_count', 0)} TRK"
+        cv2.putText(
+            frame, text, (10, y),
+            self.s.font_face, self.s.font_scale_small, self.s.color_thermal, 1, cv2.LINE_AA,
+        )
+        # Threat counts
+        threats = status.get("threat_counts", {})
+        if threats:
+            parts = []
+            for level in ["CRITICAL", "HIGH", "MEDIUM"]:
+                count = threats.get(level, 0)
+                if count > 0:
+                    parts.append(f"{level[0]}:{count}")
+            if parts:
+                cv2.putText(
+                    frame, "THR:" + " ".join(parts), (10, y + 14),
+                    self.s.font_face, self.s.font_scale_small, self.s.color_threat_high, 1, cv2.LINE_AA,
+                )

@@ -1,8 +1,8 @@
 """Kalman filter implementations for target tracking.
 
 Phase 2: Standard linear Kalman filter (constant-velocity model).
-Phase 4: Extended Kalman filter for sensor fusion.
-Phase 5: C++ backend via pybind11.
+Phase 4: Extended Kalman filter for radar fusion.
+Phase 5: Bearing-only EKF for thermal tracking.
 """
 
 from __future__ import annotations
@@ -302,3 +302,114 @@ class ExtendedKalmanFilter:
     def set_measurement_noise(self, sigma_range: float, sigma_azimuth_rad: float) -> None:
         """Set measurement noise from range (m) and azimuth (rad) std devs."""
         self.R = np.diag([sigma_range ** 2, sigma_azimuth_rad ** 2])
+
+
+class BearingOnlyEKF:
+    """Extended Kalman Filter for bearing-only tracking (thermal sensor).
+
+    State vector: [x, vx, y, vy] in Cartesian (meters).
+    Measurement: [azimuth_rad] (bearing only -- no range).
+
+    Bearing-only tracking is inherently unobservable for range from a
+    single measurement. Range converges only through:
+    - Multiple bearings over time (target motion)
+    - Fusion with range-providing sensors (radar)
+
+    Initial range must be assumed or provided externally.
+
+    Args:
+        dim_state: State dimension (default 4).
+        dt: Time step in seconds.
+    """
+
+    def __init__(self, dim_state: int = 4, dt: float = 0.033):
+        self.dim_state = dim_state
+        self.dim_meas = 1  # bearing only
+        self.dt = dt
+
+        # State [x, vx, y, vy]
+        self.x = np.zeros(dim_state)
+
+        # High initial uncertainty, especially in range direction
+        self.P = np.eye(dim_state) * 10000.0
+        self.P[0, 0] = 1e6   # Very uncertain in x (range)
+        self.P[2, 2] = 1e6   # Very uncertain in y
+
+        # Constant velocity transition
+        self.F = np.eye(dim_state)
+        self.F[0, 1] = dt
+        self.F[2, 3] = dt
+
+        # Process noise
+        self.Q = self._build_process_noise(dt)
+
+        # Measurement noise: bearing only
+        self.R = np.array([[np.radians(0.1) ** 2]])  # 0.1 deg
+
+    def predict(self) -> np.ndarray:
+        self.x = self.F @ self.x
+        self.P = self.F @ self.P @ self.F.T + self.Q
+        return self.x.copy()
+
+    def update(self, z: np.ndarray) -> np.ndarray:
+        """Update with bearing measurement z = [azimuth_rad]."""
+        H = self.H_jacobian(self.x)
+        y = z - self.h(self.x)
+        # Angular wrapping
+        y[0] = (y[0] + np.pi) % (2 * np.pi) - np.pi
+        S = H @ self.P @ H.T + self.R
+        K = self.P @ H.T @ np.linalg.inv(S)
+        self.x = self.x + K @ y
+        I_KH = np.eye(self.dim_state) - K @ H
+        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
+        return self.x.copy()
+
+    def h(self, x: np.ndarray) -> np.ndarray:
+        """Measurement function: state → [azimuth_rad]."""
+        px, _, py, _ = x
+        return np.array([np.arctan2(py, px)])
+
+    def H_jacobian(self, x: np.ndarray) -> np.ndarray:
+        """Jacobian of h(x), shape (1, 4).
+
+        dh/dx = [[-y/r², 0, x/r², 0]]
+        """
+        px, _, py, _ = x
+        r2 = max(px * px + py * py, 1e-6)
+        return np.array([[-py / r2, 0.0, px / r2, 0.0]])
+
+    def gating_distance(self, z: np.ndarray) -> float:
+        """Squared Mahalanobis distance in bearing space."""
+        H = self.H_jacobian(self.x)
+        y = z - self.h(self.x)
+        y[0] = (y[0] + np.pi) % (2 * np.pi) - np.pi
+        S = H @ self.P @ H.T + self.R
+        return float(y.T @ np.linalg.inv(S) @ y)
+
+    @property
+    def predicted_measurement(self) -> np.ndarray:
+        return self.h(self.x)
+
+    @property
+    def position(self) -> np.ndarray:
+        return np.array([self.x[0], self.x[2]])
+
+    @property
+    def velocity(self) -> np.ndarray:
+        return np.array([self.x[1], self.x[3]])
+
+    def _build_process_noise(self, dt: float, sigma_a: float = 1.0) -> np.ndarray:
+        dt2 = dt * dt
+        dt3 = dt2 * dt
+        dt4 = dt3 * dt
+        q_block = sigma_a ** 2 * np.array([
+            [dt4 / 4, dt3 / 2],
+            [dt3 / 2, dt2],
+        ])
+        Q = np.zeros((self.dim_state, self.dim_state))
+        Q[0:2, 0:2] = q_block
+        Q[2:4, 2:4] = q_block
+        return Q
+
+    def set_measurement_noise_std(self, sigma_azimuth_rad: float) -> None:
+        self.R = np.array([[sigma_azimuth_rad ** 2]])

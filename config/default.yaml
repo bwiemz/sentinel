@@ -40,6 +40,84 @@ sentinel:
             rcs_dbsm: 10
             class_name: "vehicle"
 
+    multifreq_radar:
+      enabled: false
+      mode: "simulator"
+      scan_rate_hz: 10
+      max_range_m: 20000
+      fov_deg: 120
+      bands: ["vhf", "uhf", "l_band", "s_band", "x_band"]
+      band_noise:
+        vhf:
+          range_std_m: 50.0
+          azimuth_std_deg: 5.0
+        uhf:
+          range_std_m: 30.0
+          azimuth_std_deg: 3.0
+        l_band:
+          range_std_m: 15.0
+          azimuth_std_deg: 2.0
+        s_band:
+          range_std_m: 8.0
+          azimuth_std_deg: 1.5
+        x_band:
+          range_std_m: 5.0
+          azimuth_std_deg: 1.0
+      noise:
+        false_alarm_rate: 0.01
+        detection_probability: 0.9
+      scenario:
+        targets:
+          - id: "STEALTH-01"
+            position: [8000, 2000]
+            velocity: [-150, 10]
+            rcs_dbsm: -20            # Very low X-band RCS (stealth)
+            target_type: "stealth"
+            class_name: "stealth_aircraft"
+          - id: "HYP-01"
+            position: [15000, 0]
+            velocity: [-1715, 0]
+            rcs_dbsm: 5
+            target_type: "hypersonic"
+            mach: 5.0
+            class_name: "hypersonic_vehicle"
+          - id: "CONV-01"
+            position: [5000, 1000]
+            velocity: [-50, 5]
+            rcs_dbsm: 15
+            target_type: "conventional"
+            class_name: "aircraft"
+
+    thermal:
+      enabled: false
+      mode: "simulator"
+      frame_rate_hz: 30
+      fov_deg: 60
+      max_range_m: 50000
+      bands: ["mwir", "lwir"]
+      noise:
+        detection_probability: 0.95
+        false_alarm_rate: 0.5
+        min_contrast_k: 10.0
+      scenario:
+        targets:
+          - id: "THERM-01"
+            position: [8000, 2000]
+            velocity: [-150, 10]
+            target_type: "stealth"
+            class_name: "stealth_aircraft"
+          - id: "THERM-HYP-01"
+            position: [15000, 0]
+            velocity: [-1715, 0]
+            target_type: "hypersonic"
+            mach: 5.0
+            class_name: "hypersonic_vehicle"
+          - id: "THERM-CONV-01"
+            position: [5000, 1000]
+            velocity: [-50, 5]
+            target_type: "conventional"
+            class_name: "aircraft"
+
   detection:
     model: "yolov8n.pt"
     confidence: 0.25
@@ -85,11 +163,31 @@ sentinel:
         max_coast_frames: 5
         max_tracks: 50
 
+    thermal:
+      filter:
+        type: "bearing_ekf"
+        dt: 0.033                    # 1/30 Hz thermal
+        assumed_initial_range_m: 10000.0
+      association:
+        method: "hungarian"
+        gate_threshold: 9.21
+      track_management:
+        confirm_hits: 3
+        max_coast_frames: 10
+        max_tracks: 50
+
   fusion:
     enabled: true
     camera_hfov_deg: 60.0
     azimuth_gate_deg: 5.0
+    thermal_azimuth_gate_deg: 3.0
     min_fusion_quality: 0.3
+    multifreq_correlation:
+      range_gate_m: 500.0
+      azimuth_gate_deg: 3.0
+    threat_classification:
+      hypersonic_temp_threshold_k: 1500.0
+      stealth_rcs_variation_db: 15.0
 
   ui:
     hud:
@@ -107,6 +205,13 @@ sentinel:
         background: [0, 20, 0]       # Dark green tint
         radar: [255, 200, 0]         # Cyan for radar tracks (BGR)
         fused: [255, 255, 0]         # Bright cyan for fused (BGR)
+        thermal: [0, 100, 255]       # Orange-red for thermal (BGR)
+        stealth: [200, 0, 200]       # Magenta for stealth targets
+        hypersonic: [0, 0, 255]      # Red for hypersonic targets
+        threat_critical: [0, 0, 255] # Bright red
+        threat_high: [0, 80, 255]    # Orange-red
+        threat_medium: [0, 200, 255] # Yellow
+        threat_low: [0, 200, 0]      # Green
       scanline:
         enabled: true
         spacing: 3

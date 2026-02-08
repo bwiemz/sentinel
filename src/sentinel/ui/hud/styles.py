@@ -32,6 +32,13 @@ class HUDStyles:
     color_panel_bg: Color = (0, 15, 0)        # Panel background
     color_radar: Color = (255, 200, 0)       # Cyan for radar tracks
     color_fused: Color = (255, 255, 0)       # Bright cyan for fused
+    color_thermal: Color = (0, 100, 255)     # Orange-red for thermal
+    color_stealth: Color = (200, 0, 200)     # Magenta for stealth
+    color_hypersonic: Color = (0, 0, 255)    # Red for hypersonic
+    color_threat_critical: Color = (0, 0, 255)  # Bright red
+    color_threat_high: Color = (0, 80, 255)  # Orange-red
+    color_threat_medium: Color = (0, 200, 255)  # Yellow
+    color_threat_low: Color = (0, 200, 0)    # Green
 
     # Font
     font_face: int = cv2.FONT_HERSHEY_SIMPLEX
@@ -61,6 +68,13 @@ class HUDStyles:
             color_background=tuple(colors.get("background", [0, 20, 0])),
             color_radar=tuple(colors.get("radar", [255, 200, 0])),
             color_fused=tuple(colors.get("fused", [255, 255, 0])),
+            color_thermal=tuple(colors.get("thermal", [0, 100, 255])),
+            color_stealth=tuple(colors.get("stealth", [200, 0, 200])),
+            color_hypersonic=tuple(colors.get("hypersonic", [0, 0, 255])),
+            color_threat_critical=tuple(colors.get("threat_critical", [0, 0, 255])),
+            color_threat_high=tuple(colors.get("threat_high", [0, 80, 255])),
+            color_threat_medium=tuple(colors.get("threat_medium", [0, 200, 255])),
+            color_threat_low=tuple(colors.get("threat_low", [0, 200, 0])),
             overlay_alpha=config.get("overlay_alpha", 0.85),
             scanline_enabled=config.get("scanline", {}).get("enabled", True),
             scanline_spacing=config.get("scanline", {}).get("spacing", 3),
@@ -75,3 +89,12 @@ class HUDStyles:
             TrackState.COASTING: self.color_coasting,
             TrackState.DELETED: self.color_danger,
         }.get(state, self.color_text)
+
+    def color_for_threat(self, threat_level: str) -> Color:
+        """Get the color associated with a threat level."""
+        return {
+            "CRITICAL": self.color_threat_critical,
+            "HIGH": self.color_threat_high,
+            "MEDIUM": self.color_threat_medium,
+            "LOW": self.color_threat_low,
+        }.get(threat_level, self.color_text)

@@ -13,6 +13,30 @@ import numpy as np
 class SensorType(enum.Enum):
     CAMERA = "camera"
     RADAR = "radar"
+    THERMAL = "thermal"
+
+
+class RadarBand(enum.Enum):
+    """Radar frequency bands."""
+    VHF = "vhf"        # 30-300 MHz
+    UHF = "uhf"        # 300 MHz - 1 GHz
+    L_BAND = "l_band"  # 1-2 GHz
+    S_BAND = "s_band"  # 2-4 GHz
+    X_BAND = "x_band"  # 8-12 GHz
+
+
+class ThermalBand(enum.Enum):
+    """Infrared wavelength bands."""
+    SWIR = "swir"  # 0.9-1.7 um
+    MWIR = "mwir"  # 3-5 um
+    LWIR = "lwir"  # 8-12 um
+
+
+class TargetType(enum.Enum):
+    """Target classification for simulation."""
+    CONVENTIONAL = "conventional"
+    STEALTH = "stealth"
+    HYPERSONIC = "hypersonic"
 
 
 class TrackState(enum.Enum):
@@ -40,6 +64,15 @@ class Detection:
     azimuth_deg: Optional[float] = None
     velocity_mps: Optional[float] = None
     rcs_dbsm: Optional[float] = None
+
+    # Thermal fields
+    elevation_deg: Optional[float] = None
+    temperature_k: Optional[float] = None
+    thermal_band: Optional[str] = None
+    intensity: Optional[float] = None
+
+    # Multi-frequency radar field
+    radar_band: Optional[str] = None
 
     # Shared / fused
     position_3d: Optional[np.ndarray] = None  # [x, y, z] world frame
@@ -75,6 +108,13 @@ class Detection:
             d["range_m"] = self.range_m
             d["azimuth_deg"] = self.azimuth_deg
             d["velocity_mps"] = self.velocity_mps
+        if self.radar_band is not None:
+            d["radar_band"] = self.radar_band
+        if self.temperature_k is not None:
+            d["temperature_k"] = self.temperature_k
+            d["thermal_band"] = self.thermal_band
+        if self.elevation_deg is not None:
+            d["elevation_deg"] = self.elevation_deg
         return d
 
 
