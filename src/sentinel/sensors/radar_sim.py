@@ -16,6 +16,7 @@ from sentinel.core.clock import SystemClock
 from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
+from sentinel.sensors.physics import RCSProfile, radar_snr, _snr_to_pd
 from sentinel.utils.coords import (
     azimuth_deg_to_rad,
     azimuth_rad_to_deg,
@@ -62,6 +63,8 @@ class RadarSimConfig:
     noise_rcs_dbsm: float = 2.0
     false_alarm_rate: float = 0.01
     detection_probability: float = 0.9
+    range_dependent_noise: bool = False
+    use_snr_pd: bool = False
     targets: list[RadarTarget] = field(default_factory=list)
 
     @classmethod
@@ -88,6 +91,8 @@ class RadarSimConfig:
             noise_rcs_dbsm=noise.get("rcs_dbsm", 2.0),
             false_alarm_rate=noise.get("false_alarm_rate", 0.01),
             detection_probability=noise.get("detection_probability", 0.9),
+            range_dependent_noise=noise.get("range_dependent", False),
+            use_snr_pd=noise.get("use_snr_pd", False),
             targets=targets,
         )
 
@@ -147,13 +152,25 @@ class RadarSimulator(AbstractSensor):
             if abs(az) > self._fov_half_rad:
                 continue
 
-            # Detection probability
-            if self._rng.rand() > self._config.detection_probability:
+            # Detection probability: SNR-based or flat
+            if self._config.use_snr_pd:
+                rcs_m2 = 10.0 ** (target.rcs_dbsm / 10.0)
+                snr = radar_snr(rcs_m2, r, ref_range_m=self._config.max_range_m)
+                pd = _snr_to_pd(snr)
+            else:
+                pd = self._config.detection_probability
+            if self._rng.rand() > pd:
                 continue
 
+            # Range-dependent noise scaling: noise grows with (r / max_range)^2
+            if self._config.range_dependent_noise:
+                range_factor = 1.0 + (r / self._config.max_range_m) ** 2
+            else:
+                range_factor = 1.0
+
             # Add measurement noise
-            noisy_range = r + self._rng.randn() * self._config.noise_range_m
-            noisy_az_deg = azimuth_rad_to_deg(az) + self._rng.randn() * self._config.noise_azimuth_deg
+            noisy_range = r + self._rng.randn() * self._config.noise_range_m * range_factor
+            noisy_az_deg = azimuth_rad_to_deg(az) + self._rng.randn() * self._config.noise_azimuth_deg * range_factor
             radial_vel = self._compute_radial_velocity(pos, target.velocity)
             noisy_vel = radial_vel + self._rng.randn() * self._config.noise_velocity_mps
             noisy_rcs = target.rcs_dbsm + self._rng.randn() * self._config.noise_rcs_dbsm

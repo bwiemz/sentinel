@@ -20,7 +20,7 @@ from typing import Optional
 import numpy as np
 
 from sentinel.core.clock import SystemClock
-from sentinel.core.types import Detection, SensorType, TargetType
+from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
 from sentinel.sensors.physics import (
@@ -68,6 +68,7 @@ class QuantumRadarConfig:
     noise_velocity_mps: float = 0.5
     noise_rcs_dbsm: float = 2.0
     false_alarm_rate: float = 0.005  # Lower than classical (quantum correlation)
+    range_dependent_noise: bool = False
 
     targets: list[MultiFreqRadarTarget] = field(default_factory=list)
 
@@ -141,6 +142,7 @@ class QuantumRadarConfig:
             noise_velocity_mps=noise.get("velocity_mps", 0.5),
             noise_rcs_dbsm=noise.get("rcs_dbsm", 2.0),
             false_alarm_rate=noise.get("false_alarm_rate", 0.005),
+            range_dependent_noise=noise.get("range_dependent", False),
             targets=targets,
         )
 
@@ -209,7 +211,6 @@ class QuantumRadarSimulator(AbstractSensor):
                 continue
 
             # RCS at X-band (quantum radar operates at X-band)
-            from sentinel.core.types import RadarBand
             rcs_dbsm = target.rcs_at_band(RadarBand.X_BAND)
             rcs_m2 = 10.0 ** (rcs_dbsm / 10.0)
 
@@ -245,10 +246,16 @@ class QuantumRadarSimulator(AbstractSensor):
             if self._rng.rand() > pd_qi:
                 continue
 
+            # Range-dependent noise scaling
+            if self._config.range_dependent_noise:
+                range_factor = 1.0 + (r / self._config.max_range_m) ** 2
+            else:
+                range_factor = 1.0
+
             # Add measurement noise
-            noisy_range = r + self._rng.randn() * self._config.noise_range_m
+            noisy_range = r + self._rng.randn() * self._config.noise_range_m * range_factor
             noisy_az_deg = azimuth_rad_to_deg(az) + (
-                self._rng.randn() * self._config.noise_azimuth_deg
+                self._rng.randn() * self._config.noise_azimuth_deg * range_factor
             )
             radial_vel = self._compute_radial_velocity(pos, target.velocity)
             noisy_vel = radial_vel + self._rng.randn() * self._config.noise_velocity_mps

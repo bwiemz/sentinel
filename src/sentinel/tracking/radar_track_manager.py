@@ -27,8 +27,19 @@ class RadarTrackManager:
         self._max_coast = config.track_management.get("max_coast_frames", 5)
         self._max_tracks = config.track_management.get("max_tracks", 50)
 
+        # Lifecycle thresholds (configurable)
+        self._confirm_window = config.track_management.get("confirm_window", None)
+        self._tent_delete = config.track_management.get("tentative_delete_misses", 3)
+        self._conf_coast = config.track_management.get("confirmed_coast_misses", 5)
+        self._coast_reconfirm = config.track_management.get("coast_reconfirm_hits", 2)
+        self._filter_type = config.filter.get("type", "ekf")
+        self._use_doppler = config.filter.get("use_doppler", False)
+
+        vel_gate = config.association.get("velocity_gate_mps", None)
         self._associator = RadarAssociator(
             gate_threshold=config.association.get("gate_threshold", 9.21),
+            velocity_gate_mps=float(vel_gate) if vel_gate is not None else None,
+            cascaded=config.association.get("cascaded", False),
         )
 
     def step(self, detections: list[Detection]) -> list[RadarTrack]:
@@ -76,6 +87,12 @@ class RadarTrackManager:
             dt=self._dt,
             confirm_hits=self._confirm_hits,
             max_coast=self._max_coast,
+            confirm_window=self._confirm_window,
+            tentative_delete_misses=self._tent_delete,
+            confirmed_coast_misses=self._conf_coast,
+            coast_reconfirm_hits=self._coast_reconfirm,
+            filter_type=self._filter_type,
+            use_doppler=self._use_doppler,
         )
         self._tracks[track.track_id] = track
         logger.debug("Radar track initiated: %s", track.track_id)

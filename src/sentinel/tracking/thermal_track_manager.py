@@ -23,9 +23,16 @@ class ThermalTrackManager:
         self._max_tracks = config.get("track_management", {}).get("max_tracks", 50)
         self._dt = config.get("filter", {}).get("dt", 0.033)
         self._assumed_range = config.get("filter", {}).get("assumed_initial_range_m", 10000.0)
-        gate = config.get("association", {}).get("gate_threshold", 9.21)
+        gate = config.get("association", {}).get("gate_threshold", 6.635)
         self._associator = ThermalAssociator(gate_threshold=gate)
         self._tracks: dict[str, ThermalTrack] = {}
+
+        # Lifecycle thresholds (configurable)
+        tm = config.get("track_management", {})
+        self._confirm_window = tm.get("confirm_window", None)
+        self._tent_delete = tm.get("tentative_delete_misses", 3)
+        self._conf_coast = tm.get("confirmed_coast_misses", 5)
+        self._coast_reconfirm = tm.get("coast_reconfirm_hits", 2)
 
     def step(self, detections: list[Detection]) -> list[ThermalTrack]:
         """Process one frame of thermal detections."""
@@ -56,6 +63,10 @@ class ThermalTrackManager:
                 dt=self._dt,
                 confirm_hits=self._confirm_hits,
                 max_coast=self._max_coast,
+                confirm_window=self._confirm_window,
+                tentative_delete_misses=self._tent_delete,
+                confirmed_coast_misses=self._conf_coast,
+                coast_reconfirm_hits=self._coast_reconfirm,
             )
             self._tracks[track.track_id] = track
 

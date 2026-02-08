@@ -2,6 +2,7 @@
 
 Uses scipy.optimize.linear_sum_assignment for optimal assignment between
 detections and existing tracks based on a combined cost matrix.
+Supports cascaded association (confirmed tracks get first pick).
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-from sentinel.core.types import Detection
+from sentinel.core.types import Detection, TrackState
 from sentinel.tracking.cost_functions import iou_bbox
 
 if TYPE_CHECKING:
@@ -44,6 +45,7 @@ class HungarianAssociator:
         gate_threshold: Mahalanobis distance threshold for gating (chi2).
         iou_weight: Weight for IoU cost component.
         mahalanobis_weight: Weight for Mahalanobis cost component.
+        cascaded: If True, confirmed tracks get first pick, then others.
     """
 
     def __init__(
@@ -51,20 +53,17 @@ class HungarianAssociator:
         gate_threshold: float = 9.21,
         iou_weight: float = 0.5,
         mahalanobis_weight: float = 0.5,
+        cascaded: bool = False,
     ):
         self._gate_threshold = gate_threshold
         self._iou_weight = iou_weight
         self._maha_weight = mahalanobis_weight
+        self._cascaded = cascaded
 
     def associate(
         self, tracks: list[Track], detections: list[Detection]
     ) -> AssociationResult:
-        """Perform optimal assignment between tracks and detections.
-
-        Returns:
-            AssociationResult with matched pairs, unmatched tracks, and
-            unmatched detections.
-        """
+        """Perform optimal assignment between tracks and detections."""
         if not tracks or not detections:
             return AssociationResult(
                 matched_pairs=[],
@@ -72,27 +71,99 @@ class HungarianAssociator:
                 unmatched_detections=list(range(len(detections))),
             )
 
-        # Build cost matrix
-        cost_matrix = self._build_cost_matrix(tracks, detections)
+        if self._cascaded:
+            return self._cascaded_associate(tracks, detections)
 
-        # Solve assignment
-        row_indices, col_indices = linear_sum_assignment(cost_matrix)
+        return self._single_pass(tracks, detections, list(range(len(tracks))))
 
-        # Partition into matched / unmatched
+    def _single_pass(
+        self,
+        tracks: list[Track],
+        detections: list[Detection],
+        track_indices: list[int],
+        available_dets: set[int] | None = None,
+    ) -> AssociationResult:
+        """Single-pass Hungarian association on a subset of tracks."""
+        if available_dets is None:
+            available_dets = set(range(len(detections)))
+
+        det_list = sorted(available_dets)
+        if not track_indices or not det_list:
+            return AssociationResult(
+                matched_pairs=[],
+                unmatched_tracks=list(track_indices),
+                unmatched_detections=det_list,
+            )
+
+        n_tracks = len(track_indices)
+        n_dets = len(det_list)
+        cost = np.full((n_tracks, n_dets), INFEASIBLE)
+
+        for i, ti in enumerate(track_indices):
+            track = tracks[ti]
+            for j, dj in enumerate(det_list):
+                det = detections[dj]
+                if det.bbox is None:
+                    continue
+                center = det.bbox_center
+                if center is None:
+                    continue
+
+                maha = track.kf.gating_distance(center)
+                if maha > self._gate_threshold:
+                    continue
+
+                iou_cost = 1.0
+                pred_bbox = track.predicted_bbox
+                if pred_bbox is not None:
+                    iou_cost = 1.0 - iou_bbox(pred_bbox, det.bbox)
+
+                cost[i, j] = (
+                    self._maha_weight * maha + self._iou_weight * iou_cost
+                )
+
+        row_idx, col_idx = linear_sum_assignment(cost)
+
         matched = []
-        unmatched_t = set(range(len(tracks)))
-        unmatched_d = set(range(len(detections)))
+        unmatched_t = set(track_indices)
+        unmatched_d = set(det_list)
 
-        for r, c in zip(row_indices, col_indices):
-            if cost_matrix[r, c] < INFEASIBLE:
-                matched.append((r, c))
-                unmatched_t.discard(r)
-                unmatched_d.discard(c)
+        for r, c in zip(row_idx, col_idx):
+            if cost[r, c] < INFEASIBLE:
+                matched.append((track_indices[r], det_list[c]))
+                unmatched_t.discard(track_indices[r])
+                unmatched_d.discard(det_list[c])
 
         return AssociationResult(
             matched_pairs=matched,
             unmatched_tracks=sorted(unmatched_t),
             unmatched_detections=sorted(unmatched_d),
+        )
+
+    def _cascaded_associate(
+        self, tracks: list[Track], detections: list[Detection]
+    ) -> AssociationResult:
+        """Two-pass: confirmed tracks first, then tentative/coasting."""
+        confirmed_idx = [
+            i for i, t in enumerate(tracks) if t.state == TrackState.CONFIRMED
+        ]
+        other_idx = [
+            i for i, t in enumerate(tracks) if t.state != TrackState.CONFIRMED
+        ]
+
+        result1 = self._single_pass(tracks, detections, confirmed_idx)
+        remaining_dets = set(result1.unmatched_detections)
+
+        result2 = self._single_pass(
+            tracks, detections, other_idx, available_dets=remaining_dets
+        )
+
+        return AssociationResult(
+            matched_pairs=result1.matched_pairs + result2.matched_pairs,
+            unmatched_tracks=sorted(
+                set(result1.unmatched_tracks) | set(result2.unmatched_tracks)
+            ),
+            unmatched_detections=sorted(set(result2.unmatched_detections)),
         )
 
     def _build_cost_matrix(

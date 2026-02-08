@@ -96,6 +96,9 @@ class MultiSensorFusion:
         image_width_px: int = 1280,
         azimuth_gate_deg: float = 5.0,
         thermal_azimuth_gate_deg: float = 3.0,
+        min_fusion_quality: float = 0.0,
+        hypersonic_temp_threshold_k: float = 1500.0,
+        stealth_rcs_variation_db: float = 15.0,
     ):
         self._base_fusion = TrackFusion(
             camera_hfov_deg=camera_hfov_deg,
@@ -105,6 +108,9 @@ class MultiSensorFusion:
         self._thermal_gate_deg = thermal_azimuth_gate_deg
         self._hfov_deg = camera_hfov_deg
         self._img_width = image_width_px
+        self._min_fusion_quality = min_fusion_quality
+        self._hypersonic_temp_k = hypersonic_temp_threshold_k
+        self._stealth_rcs_var_db = stealth_rcs_variation_db
 
     def fuse(
         self,
@@ -156,6 +162,10 @@ class MultiSensorFusion:
         for eft in enhanced:
             eft.threat_level = self._classify_threat(eft)
             eft.fusion_quality = self._compute_fusion_quality(eft)
+
+        # Filter by minimum fusion quality
+        if self._min_fusion_quality > 0:
+            enhanced = [e for e in enhanced if e.fusion_quality >= self._min_fusion_quality]
 
         return enhanced
 
@@ -243,7 +253,7 @@ class MultiSensorFusion:
                 continue
             for j, qt in enumerate(quantum_tracks):
                 ang_dist = self._angular_distance(fused_az, qt.azimuth_deg)
-                if ang_dist <= self._base_fusion._azimuth_gate_deg:
+                if ang_dist <= self._base_fusion._gate_deg:
                     cost[i, j] = ang_dist
 
         row_idx, col_idx = linear_sum_assignment(cost)
@@ -273,7 +283,7 @@ class MultiSensorFusion:
             quantum_radar_track=qt,
             azimuth_deg=qt.azimuth_deg,
             range_m=qt.range_m,
-            velocity_mps=qt.velocity_mps,
+            velocity_mps=float(np.linalg.norm(qt.velocity)),
             has_quantum_confirmation=True,
             sensor_sources={SensorType.QUANTUM_RADAR},
             fusion_quality=qt.score * 0.3,
@@ -314,7 +324,7 @@ class MultiSensorFusion:
         # CRITICAL: hypersonic (extreme thermal + high speed indicators)
         if eft.is_hypersonic_candidate:
             return THREAT_CRITICAL
-        if eft.temperature_k is not None and eft.temperature_k > 1500:
+        if eft.temperature_k is not None and eft.temperature_k > self._hypersonic_temp_k:
             return THREAT_CRITICAL
 
         # CRITICAL: quantum-confirmed stealth (QI detected what classical missed)

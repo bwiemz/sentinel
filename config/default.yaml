@@ -27,6 +27,8 @@ sentinel:
         rcs_dbsm: 2.0
         false_alarm_rate: 0.01
         detection_probability: 0.9
+        range_dependent: false        # noise scales with (range/max_range)^2
+        use_snr_pd: false             # SNR-based detection probability
       scenario:
         targets:
           - id: "TGT-01"
@@ -160,35 +162,45 @@ sentinel:
 
   tracking:
     filter:
-      type: "kf"                   # "kf", "ekf", "ukf"
+      type: "kf"                   # "kf", "ekf", "ca", "imm"
       dt: 0.033                    # 1/30 FPS
-      process_noise_std: 1.0
-      measurement_noise_std: 10.0
-      backend: "auto"              # "auto", "cpp", "python"
+      process_noise_std: 1.0       # Kalman process noise sigma_a
+      measurement_noise_std: 10.0  # Kalman measurement noise diagonal
+      imm:
+        transition_prob: 0.98      # Markov mode-stay probability (IMM only)
 
     association:
       method: "hungarian"
       gate_threshold: 9.21         # chi2(2df) at 99%
       iou_weight: 0.5
       mahalanobis_weight: 0.5
+      cascaded: false              # two-pass: confirmed tracks first
 
     track_management:
       confirm_hits: 3
-      confirm_window: 5
+      confirm_window: 5            # M-of-N: confirm if M hits in N frames
       max_coast_frames: 15
       max_tracks: 100
+      tentative_delete_misses: 3   # consecutive misses to delete tentative
+      confirmed_coast_misses: 5    # consecutive misses to start coasting
+      coast_reconfirm_hits: 2      # consecutive hits to re-confirm from coast
 
     radar:
       filter:
-        type: "ekf"
+        type: "ekf"                  # "ekf", "ca", "imm"
         dt: 0.1                      # 1/10 Hz radar
         process_noise_std: 1.0       # m/s^2
+        use_3d: false                # 3D state estimation (adds elevation)
+        use_doppler: false           # Doppler velocity in EKF measurement
+        elevation_noise_deg: 1.0     # elevation measurement noise (3D only)
         measurement_noise:
           range_m: 5.0
           azimuth_deg: 1.0
       association:
         method: "hungarian"
         gate_threshold: 9.21
+        velocity_gate_mps: null    # radial velocity gate (null=disabled)
+        cascaded: false            # two-pass: confirmed tracks first
       track_management:
         confirm_hits: 3
         max_coast_frames: 5
@@ -201,7 +213,7 @@ sentinel:
         assumed_initial_range_m: 10000.0
       association:
         method: "hungarian"
-        gate_threshold: 9.21
+        gate_threshold: 6.635       # chi2(1df) at 99% -- bearing-only is 1 DOF
       track_management:
         confirm_hits: 3
         max_coast_frames: 10

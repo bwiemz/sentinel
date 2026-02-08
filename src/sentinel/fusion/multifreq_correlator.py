@@ -55,15 +55,18 @@ class MultiFreqCorrelator:
     Args:
         range_gate_m: Maximum range difference for correlation.
         azimuth_gate_deg: Maximum azimuth difference for correlation.
+        stealth_rcs_variation_db: Min RCS variation across bands to flag stealth.
     """
 
     def __init__(
         self,
         range_gate_m: float = 100.0,
         azimuth_gate_deg: float = 3.0,
+        stealth_rcs_variation_db: float = 15.0,
     ):
         self._range_gate = range_gate_m
         self._azimuth_gate = azimuth_gate_deg
+        self._stealth_rcs_variation_db = stealth_rcs_variation_db
 
     def correlate(
         self, detections: list[Detection],
@@ -200,7 +203,7 @@ class MultiFreqCorrelator:
         is_stealth = False
         if len(rcs_values) >= 2:
             rcs_range = max(rcs_values) - min(rcs_values)
-            is_stealth = rcs_range >= _STEALTH_RCS_VARIATION_DB
+            is_stealth = rcs_range >= self._stealth_rcs_variation_db
 
         return CorrelatedDetection(
             primary_detection=primary,

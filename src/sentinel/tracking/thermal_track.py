@@ -6,12 +6,13 @@ from typing import Optional
 
 import numpy as np
 
-from sentinel.core.types import Detection, TrackState, generate_track_id
+from sentinel.core.types import Detection, generate_track_id
+from sentinel.tracking.base_track import TrackBase
 from sentinel.tracking.filters import BearingOnlyEKF
 from sentinel.utils.coords import azimuth_deg_to_rad, azimuth_rad_to_deg, polar_to_cartesian
 
 
-class ThermalTrack:
+class ThermalTrack(TrackBase):
     """Track from thermal sensor using bearing-only EKF.
 
     Cannot estimate range from thermal alone -- range is initialized
@@ -26,11 +27,20 @@ class ThermalTrack:
         dt: float = 0.033,
         confirm_hits: int = 3,
         max_coast: int = 10,
+        confirm_window: Optional[int] = None,
+        tentative_delete_misses: int = 3,
+        confirmed_coast_misses: int = 5,
+        coast_reconfirm_hits: int = 2,
     ):
-        self.track_id = track_id or generate_track_id()
-        self.state = TrackState.TENTATIVE
-        self._confirm_hits = confirm_hits
-        self._max_coast = max_coast
+        super().__init__(
+            track_id=track_id,
+            confirm_hits=confirm_hits,
+            max_coast=max_coast,
+            confirm_window=confirm_window,
+            tentative_delete_misses=tentative_delete_misses,
+            confirmed_coast_misses=confirmed_coast_misses,
+            coast_reconfirm_hits=coast_reconfirm_hits,
+        )
 
         # Initialize EKF
         self.ekf = BearingOnlyEKF(dt=dt)
@@ -38,13 +48,6 @@ class ThermalTrack:
         pos = polar_to_cartesian(assumed_range_m, az_rad)
         self.ekf.x[0] = pos[0]
         self.ekf.x[2] = pos[1]
-
-        # Track lifecycle counters
-        self.hits = 1
-        self.consecutive_hits = 1
-        self.misses = 0
-        self.consecutive_misses = 0
-        self.age = 0
 
         # Sensor data
         self.last_detection: Optional[Detection] = detection
@@ -60,37 +63,12 @@ class ThermalTrack:
         z = np.array([az_rad])
         self.ekf.update(z)
 
-        self.hits += 1
-        self.consecutive_hits += 1
-        self.consecutive_misses = 0
         self.last_detection = detection
         self._last_temperature_k = detection.temperature_k
-        self._update_state()
+        self._record_hit()
 
     def mark_missed(self) -> None:
-        self.misses += 1
-        self.consecutive_misses += 1
-        self.consecutive_hits = 0
-        self._update_state()
-
-    def _update_state(self) -> None:
-        if self.state == TrackState.TENTATIVE:
-            if self.consecutive_hits >= self._confirm_hits:
-                self.state = TrackState.CONFIRMED
-            elif self.consecutive_misses >= 3:
-                self.state = TrackState.DELETED
-        elif self.state == TrackState.CONFIRMED:
-            if self.consecutive_misses >= 5:
-                self.state = TrackState.COASTING
-        elif self.state == TrackState.COASTING:
-            if self.consecutive_hits >= 2:
-                self.state = TrackState.CONFIRMED
-            elif self.consecutive_misses >= self._max_coast:
-                self.state = TrackState.DELETED
-
-    @property
-    def is_alive(self) -> bool:
-        return self.state != TrackState.DELETED
+        self._record_miss()
 
     @property
     def position(self) -> np.ndarray:
@@ -123,13 +101,6 @@ class ThermalTrack:
     def predicted_bbox(self) -> None:
         """Thermal tracks have no bounding box."""
         return None
-
-    @property
-    def score(self) -> float:
-        hit_ratio = self.hits / max(self.age, 1)
-        recency = max(0, 1.0 - self.consecutive_misses * 0.15)
-        confirmation = 1.0 if self.state == TrackState.CONFIRMED else 0.5
-        return min(1.0, hit_ratio * 0.4 + recency * 0.3 + confirmation * 0.3)
 
     def to_dict(self) -> dict:
         return {

@@ -63,6 +63,7 @@ class MultiFreqRadarConfig:
     band_configs: dict[RadarBand, BandNoiseConfig] = field(default_factory=dict)
     false_alarm_rate: float = 0.01
     base_detection_probability: float = 0.9
+    range_dependent_noise: bool = False
     targets: list[MultiFreqRadarTarget] = field(default_factory=list)
 
     def noise_for_band(self, band: RadarBand) -> BandNoiseConfig:
@@ -103,14 +104,16 @@ class MultiFreqRadarConfig:
                 mach=t.get("mach", 0.0),
             ))
 
+        noise = cfg.get("noise", {})
         return cls(
             bands=bands,
             scan_rate_hz=cfg.get("scan_rate_hz", 10.0),
             max_range_m=cfg.get("max_range_m", 50000.0),
             fov_deg=cfg.get("fov_deg", 120.0),
             band_configs=band_cfgs,
-            false_alarm_rate=cfg.get("false_alarm_rate", 0.01),
-            base_detection_probability=cfg.get("base_detection_probability", 0.9),
+            false_alarm_rate=noise.get("false_alarm_rate", cfg.get("false_alarm_rate", 0.01)),
+            base_detection_probability=noise.get("detection_probability", cfg.get("base_detection_probability", 0.9)),
+            range_dependent_noise=noise.get("range_dependent", False),
             targets=targets,
         )
 
@@ -197,9 +200,15 @@ class MultiFreqRadarSimulator(AbstractSensor):
             if self._rng.rand() > pd:
                 continue
 
-            # Add band-specific noise
-            noisy_range = max(0.0, r + self._rng.randn() * noise_cfg.noise_range_m)
-            noisy_az_deg = azimuth_rad_to_deg(az) + self._rng.randn() * noise_cfg.noise_azimuth_deg
+            # Range-dependent noise scaling
+            if self._config.range_dependent_noise:
+                range_factor = 1.0 + (r / self._config.max_range_m) ** 2
+            else:
+                range_factor = 1.0
+
+            # Add band-specific noise (scaled by range factor)
+            noisy_range = max(0.0, r + self._rng.randn() * noise_cfg.noise_range_m * range_factor)
+            noisy_az_deg = azimuth_rad_to_deg(az) + self._rng.randn() * noise_cfg.noise_azimuth_deg * range_factor
             radial_vel = self._compute_radial_velocity(pos, target.velocity)
             noisy_vel = radial_vel + self._rng.randn() * noise_cfg.noise_velocity_mps
             effective_rcs = target.rcs_at_band(band)

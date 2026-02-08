@@ -30,10 +30,24 @@ class TrackManager:
         self._max_coast = config.track_management.get("max_coast_frames", 15)
         self._max_tracks = config.track_management.get("max_tracks", 100)
 
+        # Lifecycle thresholds (configurable)
+        self._confirm_window = config.track_management.get("confirm_window", None)
+        self._tent_delete = config.track_management.get("tentative_delete_misses", 3)
+        self._conf_coast = config.track_management.get("confirmed_coast_misses", 5)
+        self._coast_reconfirm = config.track_management.get("coast_reconfirm_hits", 2)
+
+        # Filter noise parameters
+        pn = config.filter.get("process_noise_std", None)
+        self._process_noise_std = float(pn) if pn is not None else None
+        mn = config.filter.get("measurement_noise_std", None)
+        self._measurement_noise_std = float(mn) if mn is not None else None
+        self._filter_type = config.filter.get("type", "kf")
+
         self._associator = HungarianAssociator(
             gate_threshold=config.association.get("gate_threshold", 9.21),
             iou_weight=config.association.get("iou_weight", 0.5),
             mahalanobis_weight=config.association.get("mahalanobis_weight", 0.5),
+            cascaded=config.association.get("cascaded", False),
         )
 
     def step(self, detections: list[Detection]) -> list[Track]:
@@ -82,6 +96,13 @@ class TrackManager:
             dt=self._dt,
             confirm_hits=self._confirm_hits,
             max_coast=self._max_coast,
+            confirm_window=self._confirm_window,
+            tentative_delete_misses=self._tent_delete,
+            confirmed_coast_misses=self._conf_coast,
+            coast_reconfirm_hits=self._coast_reconfirm,
+            process_noise_std=self._process_noise_std,
+            measurement_noise_std=self._measurement_noise_std,
+            filter_type=self._filter_type,
         )
         self._tracks[track.track_id] = track
         logger.debug("Track initiated: %s (%s)", track.track_id, detection.class_name)

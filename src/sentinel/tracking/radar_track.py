@@ -7,16 +7,24 @@ from typing import Any, Optional
 import numpy as np
 
 from sentinel.core.types import Detection, TrackState, generate_track_id
-from sentinel.tracking.filters import ExtendedKalmanFilter
+from sentinel.tracking.base_track import TrackBase
+from sentinel.tracking.filters import (
+    ConstantAccelerationEKF,
+    ExtendedKalmanFilter,
+    ExtendedKalmanFilter3D,
+    ExtendedKalmanFilterWithDoppler,
+)
+from sentinel.tracking.imm import IMMFilter
 from sentinel.utils.coords import (
     azimuth_deg_to_rad,
     azimuth_rad_to_deg,
     cartesian_to_polar,
     polar_to_cartesian,
+    polar_to_cartesian_3d,
 )
 
 
-class RadarTrack:
+class RadarTrack(TrackBase):
     """A single radar target track with EKF state estimation.
 
     Lifecycle: TENTATIVE -> CONFIRMED -> COASTING -> DELETED
@@ -30,6 +38,10 @@ class RadarTrack:
         dt: Time step (1/scan_rate_hz).
         confirm_hits: Hits needed for confirmation.
         max_coast: Max scans to coast before deletion.
+        confirm_window: Sliding window for M-of-N confirmation.
+        tentative_delete_misses: Consecutive misses to delete tentative track.
+        confirmed_coast_misses: Consecutive misses to start coasting.
+        coast_reconfirm_hits: Consecutive hits to re-confirm from coasting.
     """
 
     def __init__(
@@ -39,37 +51,57 @@ class RadarTrack:
         dt: float = 0.1,
         confirm_hits: int = 3,
         max_coast: int = 5,
+        confirm_window: Optional[int] = None,
+        tentative_delete_misses: int = 3,
+        confirmed_coast_misses: int = 5,
+        coast_reconfirm_hits: int = 2,
+        filter_type: str = "ekf",
+        use_3d: bool = False,
+        use_doppler: bool = False,
     ):
-        self.track_id = track_id or generate_track_id()
-        self.state = TrackState.TENTATIVE
-        self.ekf = ExtendedKalmanFilter(dim_state=4, dim_meas=2, dt=dt)
+        super().__init__(
+            track_id=track_id,
+            confirm_hits=confirm_hits,
+            max_coast=max_coast,
+            confirm_window=confirm_window,
+            tentative_delete_misses=tentative_delete_misses,
+            confirmed_coast_misses=confirmed_coast_misses,
+            coast_reconfirm_hits=coast_reconfirm_hits,
+        )
+        self._use_3d = use_3d
+        self._use_doppler = use_doppler
+        if use_3d:
+            self.ekf = ExtendedKalmanFilter3D(dt=dt)
+        elif use_doppler:
+            self.ekf = ExtendedKalmanFilterWithDoppler(dim_state=4, dt=dt)
+        elif filter_type == "ca":
+            self.ekf = ConstantAccelerationEKF(dim_state=6, dim_meas=2, dt=dt)
+        elif filter_type == "imm":
+            self.ekf = IMMFilter(dt=dt, mode="radar")
+        else:
+            self.ekf = ExtendedKalmanFilter(dim_state=4, dim_meas=2, dt=dt)
 
         # Initialize EKF state from polar detection
         if detection.range_m is not None and detection.azimuth_deg is not None:
             az_rad = azimuth_deg_to_rad(detection.azimuth_deg)
-            pos = polar_to_cartesian(detection.range_m, az_rad)
-            self.ekf.x[0] = pos[0]  # x
-            self.ekf.x[2] = pos[1]  # y
-            # Velocity initialized to zero
-            self.ekf.P[0, 0] = 100.0
-            self.ekf.P[2, 2] = 100.0
-
-        # Lifecycle counters
-        self.hits = 1
-        self.consecutive_hits = 1
-        self.misses = 0
-        self.consecutive_misses = 0
-        self.age = 0
-        self.score = 0.0
-
-        # Configuration
-        self._confirm_hits = confirm_hits
-        self._max_coast = max_coast
+            if use_3d:
+                el_rad = np.radians(detection.elevation_deg or 0.0)
+                pos = polar_to_cartesian_3d(detection.range_m, az_rad, el_rad)
+                self.ekf.x[0] = pos[0]
+                self.ekf.x[2] = pos[1]
+                self.ekf.x[4] = pos[2]
+                self.ekf.P[0, 0] = 100.0
+                self.ekf.P[2, 2] = 100.0
+                self.ekf.P[4, 4] = 100.0
+            else:
+                pos = polar_to_cartesian(detection.range_m, az_rad)
+                self.ekf.x[0] = pos[0]
+                self.ekf.x[2] = pos[1]
+                self.ekf.P[0, 0] = 100.0
+                self.ekf.P[2, 2] = 100.0
 
         # Last detection
         self.last_detection: Optional[Detection] = detection
-
-        self._update_score()
 
     def predict(self) -> np.ndarray:
         """Predict next state. Call once per scan."""
@@ -79,51 +111,25 @@ class RadarTrack:
     def update(self, detection: Detection) -> None:
         """Update track with a radar detection."""
         if detection.range_m is not None and detection.azimuth_deg is not None:
-            z = np.array([
-                detection.range_m,
-                azimuth_deg_to_rad(detection.azimuth_deg),
-            ])
-            self.ekf.update(z)
+            az_rad = azimuth_deg_to_rad(detection.azimuth_deg)
+            if self._use_3d:
+                el_rad = np.radians(detection.elevation_deg or 0.0)
+                z = np.array([detection.range_m, az_rad, el_rad])
+                self.ekf.update(z)
+            elif self._use_doppler and detection.velocity_mps is not None:
+                z = np.array([detection.range_m, az_rad, detection.velocity_mps])
+                self.ekf.update(z)
+            elif not self._use_doppler:
+                z = np.array([detection.range_m, az_rad])
+                self.ekf.update(z)
+            # If use_doppler but no velocity_mps, skip EKF update (predict-only)
 
-        self.hits += 1
-        self.consecutive_hits += 1
-        self.consecutive_misses = 0
         self.last_detection = detection
-
-        self._update_state()
-        self._update_score()
+        self._record_hit()
 
     def mark_missed(self) -> None:
         """Mark this track as having no associated detection this scan."""
-        self.misses += 1
-        self.consecutive_misses += 1
-        self.consecutive_hits = 0
-        self._update_state()
-        self._update_score()
-
-    def _update_state(self) -> None:
-        if self.state == TrackState.TENTATIVE:
-            if self.consecutive_hits >= self._confirm_hits:
-                self.state = TrackState.CONFIRMED
-            elif self.consecutive_misses >= 3:
-                self.state = TrackState.DELETED
-        elif self.state == TrackState.CONFIRMED:
-            if self.consecutive_misses >= 5:
-                self.state = TrackState.COASTING
-        elif self.state == TrackState.COASTING:
-            if self.consecutive_hits >= 2:
-                self.state = TrackState.CONFIRMED
-            elif self.consecutive_misses >= self._max_coast:
-                self.state = TrackState.DELETED
-
-    def _update_score(self) -> None:
-        if self.age == 0:
-            self.score = 0.5
-            return
-        hit_ratio = self.hits / max(self.age, 1)
-        recency = max(0, 1.0 - self.consecutive_misses * 0.15)
-        confirmation = 1.0 if self.state == TrackState.CONFIRMED else 0.5
-        self.score = min(1.0, hit_ratio * 0.4 + recency * 0.3 + confirmation * 0.3)
+        self._record_miss()
 
     @property
     def position(self) -> np.ndarray:
@@ -139,17 +145,23 @@ class RadarTrack:
     def range_m(self) -> float:
         """Current estimated range to target in meters."""
         pos = self.position
-        return float(np.sqrt(pos[0] ** 2 + pos[1] ** 2))
+        return float(np.linalg.norm(pos))
 
     @property
     def azimuth_deg(self) -> float:
         """Current estimated azimuth to target in degrees."""
-        _, az = cartesian_to_polar(self.position[0], self.position[1])
+        pos = self.position
+        _, az = cartesian_to_polar(pos[0], pos[1])
         return azimuth_rad_to_deg(az)
 
     @property
-    def is_alive(self) -> bool:
-        return self.state != TrackState.DELETED
+    def elevation_deg(self) -> Optional[float]:
+        """Current estimated elevation (3D mode only)."""
+        if not self._use_3d:
+            return None
+        pos = self.position
+        r_xy = np.sqrt(pos[0] ** 2 + pos[1] ** 2)
+        return float(np.degrees(np.arctan2(pos[2], r_xy)))
 
     @property
     def predicted_bbox(self) -> Optional[np.ndarray]:

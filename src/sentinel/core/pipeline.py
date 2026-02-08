@@ -171,9 +171,11 @@ class SentinelPipeline:
         self._multifreq_radar = MultiFreqRadarSimulator(mfr_config)
 
         corr_cfg = config.sentinel.get("fusion", {}).get("multifreq_correlation", {})
+        threat_cfg = config.sentinel.get("fusion", {}).get("threat_classification", {})
         self._multifreq_correlator = MultiFreqCorrelator(
             range_gate_m=corr_cfg.get("range_gate_m", 500.0),
             azimuth_gate_deg=corr_cfg.get("azimuth_gate_deg", 3.0),
+            stealth_rcs_variation_db=threat_cfg.get("stealth_rcs_variation_db", 15.0),
         )
 
         # Also set up radar tracking if not already enabled via single radar
@@ -256,11 +258,15 @@ class SentinelPipeline:
 
         fusion_cfg = config.sentinel.get("fusion", {})
         cam_cfg = config.sentinel.sensors.camera
+        threat_cfg = fusion_cfg.get("threat_classification", {})
         self._multi_sensor_fusion = MultiSensorFusion(
             camera_hfov_deg=fusion_cfg.get("camera_hfov_deg", 60.0),
             image_width_px=cam_cfg.get("width", 1280),
             azimuth_gate_deg=fusion_cfg.get("azimuth_gate_deg", 5.0),
             thermal_azimuth_gate_deg=fusion_cfg.get("thermal_azimuth_gate_deg", 3.0),
+            min_fusion_quality=fusion_cfg.get("min_fusion_quality", 0.0),
+            hypersonic_temp_threshold_k=threat_cfg.get("hypersonic_temp_threshold_k", 1500.0),
+            stealth_rcs_variation_db=threat_cfg.get("stealth_rcs_variation_db", 15.0),
         )
 
         logger.info("Multi-sensor fusion initialized (camera + radar + thermal)")

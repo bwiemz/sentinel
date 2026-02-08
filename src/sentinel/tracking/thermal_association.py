@@ -22,7 +22,7 @@ class ThermalAssociator:
         gate_threshold: Squared Mahalanobis distance threshold for gating.
     """
 
-    def __init__(self, gate_threshold: float = 9.21):
+    def __init__(self, gate_threshold: float = 6.635):
         self._gate = gate_threshold
 
     def associate(

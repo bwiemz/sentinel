@@ -7,10 +7,12 @@ from typing import Any, Optional
 import numpy as np
 
 from sentinel.core.types import Detection, TrackState, generate_track_id
-from sentinel.tracking.filters import KalmanFilter
+from sentinel.tracking.base_track import TrackBase
+from sentinel.tracking.filters import ConstantAccelerationKF, KalmanFilter
+from sentinel.tracking.imm import IMMFilter
 
 
-class Track:
+class Track(TrackBase):
     """A single target track with Kalman filter state estimation.
 
     Lifecycle:  TENTATIVE -> CONFIRMED -> COASTING -> DELETED
@@ -21,6 +23,12 @@ class Track:
         dt: Time step for the Kalman filter.
         confirm_hits: Consecutive hits needed to confirm (M in M/N logic).
         max_coast: Maximum frames to coast without updates before deletion.
+        confirm_window: Sliding window for M-of-N confirmation.
+        tentative_delete_misses: Consecutive misses to delete tentative track.
+        confirmed_coast_misses: Consecutive misses to start coasting.
+        coast_reconfirm_hits: Consecutive hits to re-confirm from coasting.
+        process_noise_std: Process noise sigma_a for Kalman filter.
+        measurement_noise_std: Measurement noise std for Kalman filter.
     """
 
     def __init__(
@@ -30,22 +38,35 @@ class Track:
         dt: float = 1 / 30,
         confirm_hits: int = 3,
         max_coast: int = 15,
+        confirm_window: Optional[int] = None,
+        tentative_delete_misses: int = 3,
+        confirmed_coast_misses: int = 5,
+        coast_reconfirm_hits: int = 2,
+        process_noise_std: Optional[float] = None,
+        measurement_noise_std: Optional[float] = None,
+        filter_type: str = "kf",
     ):
-        self.track_id = track_id or generate_track_id()
-        self.state = TrackState.TENTATIVE
-        self.kf = KalmanFilter(dim_state=4, dim_meas=2, dt=dt)
+        super().__init__(
+            track_id=track_id,
+            confirm_hits=confirm_hits,
+            max_coast=max_coast,
+            confirm_window=confirm_window,
+            tentative_delete_misses=tentative_delete_misses,
+            confirmed_coast_misses=confirmed_coast_misses,
+            coast_reconfirm_hits=coast_reconfirm_hits,
+        )
+        if filter_type == "ca":
+            self.kf = ConstantAccelerationKF(dim_state=6, dim_meas=2, dt=dt)
+        elif filter_type == "imm":
+            self.kf = IMMFilter(dt=dt, mode="camera")
+        else:
+            self.kf = KalmanFilter(dim_state=4, dim_meas=2, dt=dt)
 
-        # Track statistics
-        self.hits = 1
-        self.consecutive_hits = 1
-        self.misses = 0
-        self.consecutive_misses = 0
-        self.age = 0
-        self.score = 0.0
-
-        # Configuration
-        self._confirm_hits = confirm_hits
-        self._max_coast = max_coast
+        # Apply configured noise parameters
+        if process_noise_std is not None:
+            self.kf.set_process_noise_std(process_noise_std)
+        if measurement_noise_std is not None:
+            self.kf.set_measurement_noise_std(measurement_noise_std)
 
         # Detection history
         self.last_detection: Optional[Detection] = detection
@@ -67,8 +88,6 @@ class Track:
         if detection.class_name:
             self.class_histogram[detection.class_name] = 1
 
-        self._update_score()
-
     def predict(self) -> np.ndarray:
         """Predict next state. Call once per frame before association."""
         self.age += 1
@@ -81,9 +100,6 @@ class Track:
             if center is not None:
                 self.kf.update(center)
 
-        self.hits += 1
-        self.consecutive_hits += 1
-        self.consecutive_misses = 0
         self.last_detection = detection
 
         # Update class histogram
@@ -92,49 +108,11 @@ class Track:
                 self.class_histogram.get(detection.class_name, 0) + 1
             )
 
-        self._update_state()
-        self._update_score()
+        self._record_hit()
 
     def mark_missed(self) -> None:
         """Mark this track as having no associated detection this frame."""
-        self.misses += 1
-        self.consecutive_misses += 1
-        self.consecutive_hits = 0
-        self._update_state()
-        self._update_score()
-
-    # --- State machine ---
-
-    def _update_state(self) -> None:
-        if self.state == TrackState.TENTATIVE:
-            if self.consecutive_hits >= self._confirm_hits:
-                self.state = TrackState.CONFIRMED
-            elif self.consecutive_misses >= 3:
-                self.state = TrackState.DELETED
-        elif self.state == TrackState.CONFIRMED:
-            if self.consecutive_misses >= 5:
-                self.state = TrackState.COASTING
-        elif self.state == TrackState.COASTING:
-            if self.consecutive_hits >= 2:
-                self.state = TrackState.CONFIRMED  # Re-acquire
-            elif self.consecutive_misses >= self._max_coast:
-                self.state = TrackState.DELETED
-
-    def _update_score(self) -> None:
-        """Compute track quality score in [0, 1]."""
-        # Score components:
-        # - Hit ratio (total hits / total age)
-        # - Recency (penalize consecutive misses)
-        # - Confirmation bonus
-        if self.age == 0:
-            self.score = 0.5
-            return
-
-        hit_ratio = self.hits / max(self.age, 1)
-        recency = max(0, 1.0 - self.consecutive_misses * 0.15)
-        confirmation = 1.0 if self.state == TrackState.CONFIRMED else 0.5
-
-        self.score = min(1.0, hit_ratio * 0.4 + recency * 0.3 + confirmation * 0.3)
+        self._record_miss()
 
     # --- Properties ---
 
@@ -165,10 +143,6 @@ class Track:
         if not self.class_histogram:
             return None
         return max(self.class_histogram, key=self.class_histogram.get)
-
-    @property
-    def is_alive(self) -> bool:
-        return self.state != TrackState.DELETED
 
     def to_dict(self) -> dict[str, Any]:
         return {
