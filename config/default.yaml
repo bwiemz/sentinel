@@ -118,6 +118,37 @@ sentinel:
             target_type: "conventional"
             class_name: "aircraft"
 
+    quantum_radar:
+      enabled: false
+      mode: "simulator"
+      scan_rate_hz: 10
+      max_range_m: 15000
+      fov_deg: 120
+      freq_hz: 10.0e9               # X-band (10 GHz)
+      squeeze_param_r: 0.1          # TMSV squeeze parameter (N_S ~ 0.01)
+      n_modes: 10000                # Signal-idler mode pairs per pulse
+      antenna_gain_dbi: 30
+      receiver_type: "opa"           # opa, sfg, phase_conjugate, optimal
+      ambient_temp_k: 290.0
+      noise:
+        range_std_m: 8.0
+        azimuth_std_deg: 1.5
+        false_alarm_rate: 0.005      # Lower than classical (quantum correlation)
+      scenario:
+        targets:
+          - id: "QI-STEALTH-01"
+            position: [8000, 2000]
+            velocity: [-150, 10]
+            rcs_dbsm: -20
+            target_type: "stealth"
+            class_name: "stealth_aircraft"
+          - id: "QI-CONV-01"
+            position: [5000, 1000]
+            velocity: [-50, 5]
+            rcs_dbsm: 15
+            target_type: "conventional"
+            class_name: "aircraft"
+
   detection:
     model: "yolov8n.pt"
     confidence: 0.25
@@ -176,6 +207,22 @@ sentinel:
         max_coast_frames: 10
         max_tracks: 50
 
+    quantum_radar:
+      filter:
+        type: "ekf"
+        dt: 0.1                      # 1/10 Hz (same as classical radar)
+        process_noise_std: 1.0
+        measurement_noise:
+          range_m: 8.0
+          azimuth_deg: 1.5
+      association:
+        method: "hungarian"
+        gate_threshold: 9.21
+      track_management:
+        confirm_hits: 3
+        max_coast_frames: 5
+        max_tracks: 50
+
   fusion:
     enabled: true
     camera_hfov_deg: 60.0
@@ -208,6 +255,7 @@ sentinel:
         thermal: [0, 100, 255]       # Orange-red for thermal (BGR)
         stealth: [200, 0, 200]       # Magenta for stealth targets
         hypersonic: [0, 0, 255]      # Red for hypersonic targets
+        quantum: [255, 100, 200]     # Pink-cyan for quantum radar (BGR)
         threat_critical: [0, 0, 255] # Bright red
         threat_high: [0, 80, 255]    # Orange-red
         threat_medium: [0, 200, 255] # Yellow

@@ -2,21 +2,24 @@
 
 **Sensor-Enhanced Networked Tracking, Intelligence, and Engagement Library**
 
-Real-time multi-sensor tracking system that fuses camera, multi-frequency radar, and thermal imaging to detect and classify targets -- including stealth aircraft and hypersonic vehicles.
+Real-time multi-sensor tracking system that fuses camera, multi-frequency radar, thermal imaging, and quantum illumination radar to detect and classify targets -- including stealth aircraft and hypersonic vehicles.
 
 ## Architecture
 
 ```
 Camera (30 Hz) ──> YOLOv8 ──> TrackManager (Kalman Filter) ──────────────────┐
                                                                                │
-Multi-Freq Radar ──> MultiFreqCorrelator ──> RadarTrackManager (EKF) ─────────┼──> MultiSensorFusion ──> HUD
-  (VHF/UHF/L/S/X)     (cross-band grouping)                                   │    (threat classification)
+Multi-Freq Radar ──> MultiFreqCorrelator ──> RadarTrackManager (EKF) ─────────┤
+  (VHF/UHF/L/S/X)     (cross-band grouping)                                   │
+                                                                               ├──> MultiSensorFusion ──> HUD
+Thermal FLIR ──> ThermalTrackManager (Bearing-Only EKF) ──────────────────────┤    (threat classification)
+  (MWIR/LWIR)                                                                  │
                                                                                │
-Thermal FLIR ──> ThermalTrackManager (Bearing-Only EKF) ──────────────────────┘
-  (MWIR/LWIR)
+Quantum Radar ──> RadarTrackManager (EKF) ────────────────────────────────────┘
+  (QI X-band)       (reuses existing EKF)
 ```
 
-Three independent sensor paths run at their native rates. Tracks are fused by angular correspondence (Hungarian algorithm) and classified by threat level.
+Four independent sensor paths run at their native rates. Tracks are fused by angular correspondence (Hungarian algorithm) and classified by threat level. The quantum radar reuses the existing radar EKF pipeline -- quantum advantage manifests in detection probability, not measurement format.
 
 ## Key Capabilities
 
@@ -28,8 +31,9 @@ Three independent sensor paths run at their native rates. Tracks are fused by an
 - **Thermal imaging**: Passive FLIR simulation (MWIR/LWIR) with bearing-only tracking -- no range, unaffected by plasma
 - **Stealth detection**: Radar-absorbing materials absorb X-band but not VHF/UHF. Cross-band RCS variation flags stealth candidates
 - **Hypersonic detection**: Mach 5+ targets create extreme thermal signatures (>1500K) that thermal sensors always detect, even when radar is degraded by plasma sheath
-- **Threat classification**: CRITICAL (hypersonic), HIGH (stealth), MEDIUM (multi-sensor conventional), LOW (single-sensor)
-- **Military HUD**: Real-time overlay with track boxes, velocity vectors, targeting reticle, radar/thermal blips, threat badges, and stealth/hypersonic alert banners
+- **Quantum illumination radar**: Entangled microwave photon pairs (TMSV state) for enhanced stealth detection at X-band where classical radar fails. OPA/SFG/Phase-Conjugate receiver models. 6 dB SNR advantage over classical at same energy budget
+- **Threat classification**: CRITICAL (hypersonic, quantum-confirmed stealth), HIGH (stealth, quantum-only), MEDIUM (multi-sensor conventional), LOW (single-sensor)
+- **Military HUD**: Real-time overlay with track boxes, velocity vectors, targeting reticle, radar/thermal/quantum blips, threat badges, and stealth/hypersonic alert banners
 
 ## Quick Start
 
@@ -61,7 +65,7 @@ sentinel --model yolov8s.pt --device cuda:0
 pytest tests/unit/ -v
 ```
 
-333 tests covering all subsystems.
+411 tests covering all subsystems.
 
 ## Configuration
 
@@ -73,14 +77,16 @@ All settings live in `config/default.yaml` under the `sentinel:` namespace. Key 
 | `sensors.radar` | Single-frequency radar simulator (Phase 4) |
 | `sensors.multifreq_radar` | Multi-band radar with per-band noise profiles |
 | `sensors.thermal` | Thermal FLIR simulator with MWIR/LWIR bands |
+| `sensors.quantum_radar` | Quantum illumination radar (QI X-band, TMSV source) |
 | `detection` | YOLOv8 model, confidence, device |
 | `tracking` | Kalman filter params, association gating, track lifecycle |
 | `tracking.radar` | EKF params for radar tracking |
 | `tracking.thermal` | Bearing-only EKF params for thermal tracking |
+| `tracking.quantum_radar` | EKF params for quantum radar tracking |
 | `fusion` | Azimuth gates, multi-freq correlation, threat thresholds |
 | `ui.hud` | HUD colors, overlay alpha, scanline effect |
 
-Enable multi-freq radar and thermal by setting `enabled: true` in their respective sections. When disabled, the system runs in camera-only or camera+single-radar mode (backward compatible).
+Enable multi-freq radar, thermal, and quantum radar by setting `enabled: true` in their respective sections. When disabled, the system runs in camera-only or camera+single-radar mode (backward compatible).
 
 ## Project Structure
 
@@ -101,7 +107,8 @@ sentinel/
       radar_sim.py            # Single-freq radar simulator + MultiFreqRadarTarget
       multifreq_radar_sim.py  # 5-band radar simulator
       thermal_sim.py          # Thermal FLIR simulator (bearing-only)
-      physics.py              # RCS profiles, plasma sheath, thermal signatures
+      quantum_radar_sim.py    # Quantum illumination radar simulator
+      physics.py              # RCS profiles, plasma sheath, thermal signatures, QI physics
       frame.py                # SensorFrame container
     detection/
       yolo.py                 # YOLOv8 detector wrapper
@@ -126,7 +133,7 @@ sentinel/
       elements.py             # Drawing primitives (boxes, blips, alerts)
       styles.py               # Colors, fonts, visual config
   tests/unit/
-    test_*.py                 # 333 unit tests
+    test_*.py                 # 411 unit tests
 ```
 
 ## Physics Models
@@ -165,6 +172,35 @@ T_surface = T_ambient * (1 + 0.85 * 0.2 * Mach^2)
 
 At Mach 5, surface temperatures exceed 1500K, making thermal detection the primary sensor for hypersonic threats.
 
+### Quantum Illumination (Stealth Detection)
+
+Quantum illumination uses entangled microwave photon pairs (Two-Mode Squeezed Vacuum state) to achieve a detection advantage over classical radar. The signal photon is transmitted toward the target while the idler is retained at the receiver; joint measurement exploits quantum correlations.
+
+**TMSV source**: Mean signal photons per mode: `N_S = sinh²(r)`, where r is the squeeze parameter. QI advantage is maximal when N_S << 1 (r ≈ 0.1 → N_S ≈ 0.01).
+
+**Error exponents** (asymptotic detection performance):
+
+```
+QI:        β_QI = M · N_S / N_B
+Classical: β_C  = M · N_S² / (4 · N_B)
+Advantage: β_QI / β_C = 4 / N_S  (6 dB when N_S << 1)
+```
+
+Where M = signal-idler mode pairs per pulse, N_B = thermal background photons.
+
+**Receiver models** (fraction of theoretical 6 dB advantage achieved):
+
+| Receiver | Advantage | Status |
+|----------|-----------|--------|
+| OPA (Optical Parametric Amplifier) | 3 dB | Experimentally demonstrated |
+| SFG (Sum-Frequency Generation) | 6 dB | Theoretical, requires ideal conversion |
+| Phase Conjugate | 3 dB | Demonstrated in optical domain |
+| Optimal (Helstrom bound) | 6 dB | Theoretical limit |
+
+**Where QI excels**: Low N_S + high N_B = exactly the stealth detection scenario. A stealth target with -20 dBsm at X-band is nearly invisible to classical X-band radar, but QI's 6 dB SNR advantage can push it above the detection threshold.
+
+**Entanglement fidelity**: `F = η·N_S / (η·N_S + (1-η)·N_B + 1)` -- measures how well quantum correlations survive the round-trip channel loss η.
+
 ### Combined Detection Probability
 
 Multi-sensor detection probability across N independent sensors:
@@ -182,6 +218,7 @@ P_total = 1 - product(1 - P_i)
 | 3 | Hungarian algorithm for globally optimal data association | `8436e97` |
 | 4 | Radar sensor fusion with Extended Kalman Filter | `15eb377` |
 | 5 | Multi-frequency radar + thermal imaging for stealth/hypersonic detection | `5ac63ad` |
+| 6 | Quantum illumination radar for enhanced stealth detection | -- |
 
 ## Dependencies
 

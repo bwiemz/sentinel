@@ -153,6 +153,7 @@ class HUDRenderer:
             self._elements.draw_radar_status_line(display, system_status)
         if thermal_tracks is not None or enhanced_fused_tracks is not None:
             self._elements.draw_thermal_status_line(display, system_status)
+        self._elements.draw_quantum_status_line(display, system_status)
         self._elements.draw_track_list_panel(display, alive_tracks)
         self._elements.draw_border_frame(display)
 

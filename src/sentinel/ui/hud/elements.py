@@ -468,3 +468,19 @@ class HUDElements:
                     frame, "THR:" + " ".join(parts), (10, y + 14),
                     self.s.font_face, self.s.font_scale_small, self.s.color_threat_high, 1, cv2.LINE_AA,
                 )
+
+    def draw_quantum_status_line(self, frame: np.ndarray, status: dict) -> None:
+        """Draw quantum radar status in the status panel area."""
+        if not status.get("quantum_radar_connected", False):
+            return
+        # Position below thermal status
+        y = 158
+        if status.get("radar_connected", False):
+            y += 14
+        if status.get("thermal_connected", False):
+            y += 28
+        text = f"QI: {status.get('quantum_radar_track_count', 0)} TRK"
+        cv2.putText(
+            frame, text, (10, y),
+            self.s.font_face, self.s.font_scale_small, self.s.color_quantum, 1, cv2.LINE_AA,
+        )

@@ -35,6 +35,7 @@ class HUDStyles:
     color_thermal: Color = (0, 100, 255)     # Orange-red for thermal
     color_stealth: Color = (200, 0, 200)     # Magenta for stealth
     color_hypersonic: Color = (0, 0, 255)    # Red for hypersonic
+    color_quantum: Color = (255, 100, 200)    # Pink-cyan for quantum radar
     color_threat_critical: Color = (0, 0, 255)  # Bright red
     color_threat_high: Color = (0, 80, 255)  # Orange-red
     color_threat_medium: Color = (0, 200, 255)  # Yellow
@@ -71,6 +72,7 @@ class HUDStyles:
             color_thermal=tuple(colors.get("thermal", [0, 100, 255])),
             color_stealth=tuple(colors.get("stealth", [200, 0, 200])),
             color_hypersonic=tuple(colors.get("hypersonic", [0, 0, 255])),
+            color_quantum=tuple(colors.get("quantum", [255, 100, 200])),
             color_threat_critical=tuple(colors.get("threat_critical", [0, 0, 255])),
             color_threat_high=tuple(colors.get("threat_high", [0, 80, 255])),
             color_threat_medium=tuple(colors.get("threat_medium", [0, 200, 255])),

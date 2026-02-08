@@ -35,10 +35,13 @@ class EnhancedFusedTrack(FusedTrack):
     """Fused track with multi-sensor metadata and threat classification."""
 
     thermal_track: Optional[ThermalTrack] = None
+    quantum_radar_track: Optional[RadarTrack] = None
     correlated_detection: Optional[CorrelatedDetection] = None
     radar_bands_detected: list[str] = field(default_factory=list)
     thermal_bands_detected: list[str] = field(default_factory=list)
     temperature_k: Optional[float] = None
+    qi_advantage_db: Optional[float] = None
+    has_quantum_confirmation: bool = False
     is_stealth_candidate: bool = False
     is_hypersonic_candidate: bool = False
     threat_level: str = "UNKNOWN"
@@ -52,6 +55,8 @@ class EnhancedFusedTrack(FusedTrack):
             count += 1
         if self.thermal_track is not None:
             count += 1
+        if self.quantum_radar_track is not None:
+            count += 1
         return count
 
     def to_dict(self) -> dict:
@@ -59,6 +64,8 @@ class EnhancedFusedTrack(FusedTrack):
         d.update({
             "sensor_count": self.sensor_count,
             "temperature_k": self.temperature_k,
+            "qi_advantage_db": self.qi_advantage_db,
+            "has_quantum_confirmation": self.has_quantum_confirmation,
             "is_stealth_candidate": self.is_stealth_candidate,
             "is_hypersonic_candidate": self.is_hypersonic_candidate,
             "threat_level": self.threat_level,
@@ -105,9 +112,10 @@ class MultiSensorFusion:
         radar_tracks: list[RadarTrack],
         thermal_tracks: Optional[list[ThermalTrack]] = None,
         correlated_detections: Optional[list[CorrelatedDetection]] = None,
+        quantum_radar_tracks: Optional[list[RadarTrack]] = None,
     ) -> list[EnhancedFusedTrack]:
         """Full multi-sensor fusion."""
-        if not camera_tracks and not radar_tracks and not thermal_tracks:
+        if not camera_tracks and not radar_tracks and not thermal_tracks and not quantum_radar_tracks:
             return []
 
         # Stage 1: Camera <-> Radar fusion (reuse existing logic)
@@ -135,6 +143,10 @@ class MultiSensorFusion:
         # Stage 2: Associate thermal tracks
         if thermal_tracks:
             enhanced = self._associate_thermal(enhanced, thermal_tracks)
+
+        # Stage 3: Associate quantum radar tracks
+        if quantum_radar_tracks:
+            enhanced = self._associate_quantum_radar(enhanced, quantum_radar_tracks)
 
         # Attach correlated detection metadata
         if correlated_detections:
@@ -209,6 +221,68 @@ class MultiSensorFusion:
             fusion_quality=tt.score * 0.3,
         )
 
+    def _associate_quantum_radar(
+        self,
+        fused_tracks: list[EnhancedFusedTrack],
+        quantum_tracks: list[RadarTrack],
+    ) -> list[EnhancedFusedTrack]:
+        """Associate quantum radar tracks into fused tracks by azimuth."""
+        if not fused_tracks or not quantum_tracks:
+            # Create quantum-only fused tracks
+            for qt in quantum_tracks:
+                fused_tracks.append(self._make_quantum_only(qt))
+            return fused_tracks
+
+        n_fused = len(fused_tracks)
+        n_quantum = len(quantum_tracks)
+        cost = np.full((n_fused, n_quantum), _INFEASIBLE)
+
+        for i, eft in enumerate(fused_tracks):
+            fused_az = self._get_fused_azimuth(eft)
+            if fused_az is None:
+                continue
+            for j, qt in enumerate(quantum_tracks):
+                ang_dist = self._angular_distance(fused_az, qt.azimuth_deg)
+                if ang_dist <= self._base_fusion._azimuth_gate_deg:
+                    cost[i, j] = ang_dist
+
+        row_idx, col_idx = linear_sum_assignment(cost)
+        matched: set[int] = set()
+
+        for r, c in zip(row_idx, col_idx):
+            if cost[r, c] < _INFEASIBLE:
+                fused_tracks[r].quantum_radar_track = quantum_tracks[c]
+                fused_tracks[r].has_quantum_confirmation = True
+                fused_tracks[r].sensor_sources.add(SensorType.QUANTUM_RADAR)
+                # Extract QI advantage from the track's last detection
+                last_det = quantum_tracks[c].last_detection
+                if last_det and last_det.qi_advantage_db is not None:
+                    fused_tracks[r].qi_advantage_db = last_det.qi_advantage_db
+                matched.add(c)
+
+        # Unmatched quantum tracks -> quantum-only
+        for j, qt in enumerate(quantum_tracks):
+            if j not in matched:
+                fused_tracks.append(self._make_quantum_only(qt))
+
+        return fused_tracks
+
+    def _make_quantum_only(self, qt: RadarTrack) -> EnhancedFusedTrack:
+        eft = EnhancedFusedTrack(
+            fused_id=generate_track_id(),
+            quantum_radar_track=qt,
+            azimuth_deg=qt.azimuth_deg,
+            range_m=qt.range_m,
+            velocity_mps=qt.velocity_mps,
+            has_quantum_confirmation=True,
+            sensor_sources={SensorType.QUANTUM_RADAR},
+            fusion_quality=qt.score * 0.3,
+        )
+        last_det = qt.last_detection
+        if last_det and last_det.qi_advantage_db is not None:
+            eft.qi_advantage_db = last_det.qi_advantage_db
+        return eft
+
     def _attach_correlation_metadata(
         self,
         enhanced: list[EnhancedFusedTrack],
@@ -243,8 +317,16 @@ class MultiSensorFusion:
         if eft.temperature_k is not None and eft.temperature_k > 1500:
             return THREAT_CRITICAL
 
+        # CRITICAL: quantum-confirmed stealth (QI detected what classical missed)
+        if eft.is_stealth_candidate and eft.has_quantum_confirmation:
+            return THREAT_CRITICAL
+
         # HIGH: stealth (detected at low-freq radar but not high-freq)
         if eft.is_stealth_candidate:
+            return THREAT_HIGH
+
+        # HIGH: quantum-only detection (no classical radar, but QI sees it)
+        if eft.has_quantum_confirmation and eft.radar_track is None and eft.camera_track is None:
             return THREAT_HIGH
 
         # MEDIUM: confirmed by multiple sensor modalities
@@ -265,6 +347,8 @@ class MultiSensorFusion:
             base += eft.radar_track.score * 0.3
         if eft.thermal_track is not None:
             base += eft.thermal_track.score * 0.2
+        if eft.quantum_radar_track is not None:
+            base += eft.quantum_radar_track.score * 0.2
 
         # Multi-band radar bonus
         n_bands = len(eft.radar_bands_detected)

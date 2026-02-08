@@ -106,10 +106,20 @@ class SentinelPipeline:
         if self._thermal_enabled:
             self._init_thermal(config)
 
-        # --- Multi-Sensor Fusion (Phase 5) ---
+        # --- Quantum Radar (Phase 6) ---
+        self._quantum_radar_enabled = config.sentinel.sensors.get("quantum_radar", {}).get("enabled", False)
+        self._quantum_radar = None
+        self._quantum_radar_track_manager = None
+        self._latest_quantum_radar_detections: list[Detection] = []
+        self._latest_quantum_radar_tracks: list = []
+
+        if self._quantum_radar_enabled:
+            self._init_quantum_radar(config)
+
+        # --- Multi-Sensor Fusion (Phase 5+6) ---
         self._multi_sensor_fusion = None
         self._latest_enhanced_fused: list = []
-        if self._multifreq_radar_enabled or self._thermal_enabled:
+        if self._multifreq_radar_enabled or self._thermal_enabled or self._quantum_radar_enabled:
             self._init_multi_sensor_fusion(config)
 
     def _init_radar(self, config: DictConfig) -> None:
@@ -211,6 +221,35 @@ class SentinelPipeline:
 
         logger.info("Thermal subsystem initialized")
 
+    def _init_quantum_radar(self, config: DictConfig) -> None:
+        """Initialize quantum illumination radar simulator and tracker."""
+        from sentinel.sensors.quantum_radar_sim import QuantumRadarConfig, QuantumRadarSimulator
+        from sentinel.tracking.radar_track_manager import RadarTrackManager
+
+        qr_cfg = config.sentinel.sensors.quantum_radar
+        qr_config = QuantumRadarConfig.from_omegaconf(qr_cfg)
+        self._quantum_radar = QuantumRadarSimulator(qr_config)
+
+        # Reuse RadarTrackManager with quantum radar tracking params
+        qr_tracking = config.sentinel.get("tracking", {}).get("quantum_radar", {})
+        qr_track_cfg = OmegaConf.create({
+            "filter": {
+                "dt": qr_tracking.get("filter", {}).get("dt", 1.0 / qr_cfg.get("scan_rate_hz", 10)),
+                "type": "ekf",
+            },
+            "association": {
+                "gate_threshold": qr_tracking.get("association", {}).get("gate_threshold", 9.21),
+            },
+            "track_management": {
+                "confirm_hits": qr_tracking.get("track_management", {}).get("confirm_hits", 3),
+                "max_coast_frames": qr_tracking.get("track_management", {}).get("max_coast_frames", 5),
+                "max_tracks": qr_tracking.get("track_management", {}).get("max_tracks", 50),
+            },
+        })
+        self._quantum_radar_track_manager = RadarTrackManager(qr_track_cfg)
+
+        logger.info("Quantum radar subsystem initialized (receiver: %s)", qr_cfg.get("receiver_type", "opa"))
+
     def _init_multi_sensor_fusion(self, config: DictConfig) -> None:
         """Initialize enhanced multi-sensor fusion."""
         from sentinel.fusion.multi_sensor_fusion import MultiSensorFusion
@@ -249,6 +288,10 @@ class SentinelPipeline:
             self._thermal.connect()
             logger.info("Thermal simulator connected.")
 
+        if self._quantum_radar_enabled and self._quantum_radar is not None:
+            self._quantum_radar.connect()
+            logger.info("Quantum radar simulator connected.")
+
         logger.info("Warming up detector...")
         self._detector.warmup()
         logger.info("Tracker ready: max %d tracks", self._config.sentinel.tracking.track_management.max_tracks)
@@ -258,6 +301,8 @@ class SentinelPipeline:
             logger.info("Multi-frequency radar + correlation enabled.")
         if self._thermal_enabled:
             logger.info("Thermal tracking enabled.")
+        if self._quantum_radar_enabled:
+            logger.info("Quantum illumination radar enabled.")
 
         self._running = True
         logger.info("Pipeline running. Press 'q' to quit.")
@@ -273,9 +318,11 @@ class SentinelPipeline:
         radar_interval = 1.0 / self._config.sentinel.sensors.radar.get("scan_rate_hz", 10)
         mfr_interval = 1.0 / self._config.sentinel.sensors.get("multifreq_radar", {}).get("scan_rate_hz", 10)
         thermal_interval = 1.0 / self._config.sentinel.sensors.get("thermal", {}).get("frame_rate_hz", 30)
+        qr_interval = 1.0 / self._config.sentinel.sensors.get("quantum_radar", {}).get("scan_rate_hz", 10)
         last_radar_time = 0.0
         last_mfr_time = 0.0
         last_thermal_time = 0.0
+        last_qr_time = 0.0
 
         while self._running:
             # 1. Read camera frame
@@ -314,14 +361,21 @@ class SentinelPipeline:
                     self._process_thermal_scan()
                     last_thermal_time = timestamp
 
+            # 3d. Quantum radar scan (if enabled)
+            if self._quantum_radar_enabled and self._quantum_radar is not None:
+                if (timestamp - last_qr_time) >= qr_interval:
+                    self._process_quantum_radar_scan()
+                    last_qr_time = timestamp
+
             # 4. Fusion (every camera frame, using latest tracks)
             if self._multi_sensor_fusion is not None:
-                # Enhanced multi-sensor fusion (Phase 5)
+                # Enhanced multi-sensor fusion (Phase 5+6)
                 self._latest_enhanced_fused = self._multi_sensor_fusion.fuse(
                     self._latest_tracks,
                     self._latest_radar_tracks,
                     self._latest_thermal_tracks if self._thermal_enabled else None,
                     self._latest_correlated_detections if self._multifreq_radar_enabled else None,
+                    quantum_radar_tracks=self._latest_quantum_radar_tracks if self._quantum_radar_enabled else None,
                 )
             elif self._track_fusion is not None:
                 # Legacy camera+radar fusion (Phase 4)
@@ -398,6 +452,18 @@ class SentinelPipeline:
         self._latest_thermal_detections = dets
         self._latest_thermal_tracks = self._thermal_track_manager.step(dets)
 
+    def _process_quantum_radar_scan(self) -> None:
+        """Read quantum radar frame and track."""
+        from sentinel.sensors.quantum_radar_sim import quantum_radar_frame_to_detections
+
+        frame = self._quantum_radar.read_frame()
+        if frame is None:
+            return
+
+        dets = quantum_radar_frame_to_detections(frame)
+        self._latest_quantum_radar_detections = dets
+        self._latest_quantum_radar_tracks = self._quantum_radar_track_manager.step(dets)
+
     def _shutdown(self) -> None:
         logger.info("Shutting down pipeline...")
         self._running = False
@@ -408,6 +474,8 @@ class SentinelPipeline:
             self._multifreq_radar.disconnect()
         if self._thermal is not None:
             self._thermal.disconnect()
+        if self._quantum_radar is not None:
+            self._quantum_radar.disconnect()
         cv2.destroyAllWindows()
         logger.info("Pipeline stopped. Final stats:")
         logger.info("  Camera tracks created: %d", len(self._track_manager._tracks) + self._track_manager.track_count)
@@ -419,6 +487,8 @@ class SentinelPipeline:
             logger.info("  Correlated detections: %d", len(self._latest_correlated_detections))
         if self._thermal_enabled and self._thermal_track_manager is not None:
             logger.info("  Active thermal tracks: %d", self._thermal_track_manager.track_count)
+        if self._quantum_radar_enabled and self._quantum_radar_track_manager is not None:
+            logger.info("  Active quantum radar tracks: %d", self._quantum_radar_track_manager.track_count)
         if self._multi_sensor_fusion is not None:
             logger.info("  Enhanced fused tracks: %d", len(self._latest_enhanced_fused))
 
@@ -444,6 +514,9 @@ class SentinelPipeline:
         if self._thermal_enabled:
             status["thermal_connected"] = self._thermal.is_connected if self._thermal else False
             status["thermal_track_count"] = self._thermal_track_manager.track_count if self._thermal_track_manager else 0
+        if self._quantum_radar_enabled:
+            status["quantum_radar_connected"] = self._quantum_radar.is_connected if self._quantum_radar else False
+            status["quantum_radar_track_count"] = self._quantum_radar_track_manager.track_count if self._quantum_radar_track_manager else 0
         if self._multi_sensor_fusion is not None:
             status["fused_track_count"] = len(self._latest_enhanced_fused)
             # Threat counts

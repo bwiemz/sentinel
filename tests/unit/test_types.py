@@ -158,6 +158,61 @@ class TestTargetType:
         assert TargetType.HYPERSONIC.value == "hypersonic"
 
 
+class TestSensorType:
+    def test_quantum_radar_exists(self):
+        assert SensorType.QUANTUM_RADAR.value == "quantum_radar"
+
+    def test_sensor_type_count(self):
+        assert len(SensorType) == 4  # CAMERA, RADAR, THERMAL, QUANTUM_RADAR
+
+
+class TestQuantumRadarDetection:
+    def test_quantum_radar_detection(self):
+        det = Detection(
+            sensor_type=SensorType.QUANTUM_RADAR,
+            timestamp=400.0,
+            range_m=8000.0,
+            azimuth_deg=30.0,
+            velocity_mps=-150.0,
+            rcs_dbsm=-20.0,
+            qi_advantage_db=6.0,
+            entanglement_fidelity=0.01,
+            n_signal_photons=0.01,
+            receiver_type="opa",
+        )
+        assert det.sensor_type == SensorType.QUANTUM_RADAR
+        assert det.qi_advantage_db == 6.0
+        assert det.entanglement_fidelity == 0.01
+        assert det.n_signal_photons == 0.01
+        assert det.receiver_type == "opa"
+        assert det.range_m == 8000.0
+
+    def test_quantum_fields_default_none(self):
+        det = Detection(sensor_type=SensorType.RADAR, timestamp=0)
+        assert det.qi_advantage_db is None
+        assert det.entanglement_fidelity is None
+        assert det.n_signal_photons is None
+        assert det.receiver_type is None
+
+    def test_quantum_to_dict(self):
+        det = Detection(
+            sensor_type=SensorType.QUANTUM_RADAR,
+            timestamp=1.0,
+            range_m=5000.0,
+            azimuth_deg=10.0,
+            velocity_mps=50.0,
+            qi_advantage_db=12.0,
+            entanglement_fidelity=0.005,
+            n_signal_photons=0.01,
+            receiver_type="sfg",
+        )
+        d = det.to_dict()
+        assert d["sensor_type"] == "quantum_radar"
+        assert d["qi_advantage_db"] == 12.0
+        assert d["entanglement_fidelity"] == 0.005
+        assert d["receiver_type"] == "sfg"
+
+
 class TestTrackState:
     def test_states_exist(self):
         assert TrackState.TENTATIVE.value == "tentative"

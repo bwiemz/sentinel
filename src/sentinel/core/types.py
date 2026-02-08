@@ -14,6 +14,7 @@ class SensorType(enum.Enum):
     CAMERA = "camera"
     RADAR = "radar"
     THERMAL = "thermal"
+    QUANTUM_RADAR = "quantum_radar"
 
 
 class RadarBand(enum.Enum):
@@ -74,6 +75,12 @@ class Detection:
     # Multi-frequency radar field
     radar_band: Optional[str] = None
 
+    # Quantum illumination radar fields
+    qi_advantage_db: Optional[float] = None
+    entanglement_fidelity: Optional[float] = None
+    n_signal_photons: Optional[float] = None
+    receiver_type: Optional[str] = None
+
     # Shared / fused
     position_3d: Optional[np.ndarray] = None  # [x, y, z] world frame
 
@@ -115,6 +122,11 @@ class Detection:
             d["thermal_band"] = self.thermal_band
         if self.elevation_deg is not None:
             d["elevation_deg"] = self.elevation_deg
+        if self.qi_advantage_db is not None:
+            d["qi_advantage_db"] = self.qi_advantage_db
+            d["entanglement_fidelity"] = self.entanglement_fidelity
+            d["n_signal_photons"] = self.n_signal_photons
+            d["receiver_type"] = self.receiver_type
         return d
 
 
