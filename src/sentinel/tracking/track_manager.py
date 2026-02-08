@@ -1,19 +1,17 @@
-"""Single-target track manager for Phase 2.
+"""Multi-target track manager with Hungarian (optimal) association.
 
-Phase 3 upgrades this to full multi-target with Hungarian association.
-For now, uses simple nearest-neighbor for single/few targets.
+Uses scipy.optimize.linear_sum_assignment for globally optimal
+detection-to-track matching based on combined Mahalanobis + IoU cost.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
-import numpy as np
 from omegaconf import DictConfig
 
 from sentinel.core.types import Detection, TrackState
-from sentinel.tracking.filters import KalmanFilter
+from sentinel.tracking.association import HungarianAssociator
 from sentinel.tracking.track import Track
 
 logger = logging.getLogger(__name__)
@@ -22,8 +20,7 @@ logger = logging.getLogger(__name__)
 class TrackManager:
     """Manages track lifecycle: initiation, update, coasting, deletion.
 
-    Phase 2: Simple nearest-neighbor association.
-    Phase 3: Upgraded to Hungarian algorithm.
+    Uses the Hungarian algorithm for globally optimal data association.
     """
 
     def __init__(self, config: DictConfig):
@@ -32,13 +29,18 @@ class TrackManager:
         self._confirm_hits = config.track_management.get("confirm_hits", 3)
         self._max_coast = config.track_management.get("max_coast_frames", 15)
         self._max_tracks = config.track_management.get("max_tracks", 100)
-        self._gate_threshold = config.association.get("gate_threshold", 9.21)
+
+        self._associator = HungarianAssociator(
+            gate_threshold=config.association.get("gate_threshold", 9.21),
+            iou_weight=config.association.get("iou_weight", 0.5),
+            mahalanobis_weight=config.association.get("mahalanobis_weight", 0.5),
+        )
 
     def step(self, detections: list[Detection]) -> list[Track]:
         """Process one frame of detections. Returns active tracks.
 
         1. Predict all existing tracks
-        2. Associate detections to tracks (nearest-neighbor)
+        2. Associate detections to tracks (Hungarian algorithm)
         3. Update matched tracks
         4. Mark unmatched tracks as missed
         5. Initiate new tracks from unmatched detections
@@ -51,44 +53,22 @@ class TrackManager:
 
         active = [t for t in self._tracks.values() if t.is_alive]
 
-        # 2. Associate (simple nearest-neighbor for Phase 2)
-        matched_tracks: set[str] = set()
-        matched_dets: set[int] = set()
+        # 2. Associate (Hungarian algorithm for optimal assignment)
+        result = self._associator.associate(active, detections)
 
-        for i, det in enumerate(detections):
-            if det.bbox is None:
-                continue
-            center = det.bbox_center
-            if center is None:
-                continue
-
-            best_track: Optional[Track] = None
-            best_dist = float("inf")
-
-            for track in active:
-                if track.track_id in matched_tracks:
-                    continue
-                dist = track.kf.gating_distance(center)
-                if dist < self._gate_threshold and dist < best_dist:
-                    best_dist = dist
-                    best_track = track
-
-            if best_track is not None:
-                # 3. Update matched track
-                best_track.update(det)
-                matched_tracks.add(best_track.track_id)
-                matched_dets.add(i)
+        # 3. Update matched tracks
+        for track_idx, det_idx in result.matched_pairs:
+            active[track_idx].update(detections[det_idx])
 
         # 4. Mark unmatched tracks as missed
-        for track in active:
-            if track.track_id not in matched_tracks:
-                track.mark_missed()
+        for track_idx in result.unmatched_tracks:
+            active[track_idx].mark_missed()
 
         # 5. Initiate new tracks from unmatched detections
-        for i, det in enumerate(detections):
-            if i not in matched_dets and det.bbox is not None:
-                if len(self._tracks) < self._max_tracks:
-                    self._initiate_track(det)
+        for det_idx in result.unmatched_detections:
+            det = detections[det_idx]
+            if det.bbox is not None and len(self._tracks) < self._max_tracks:
+                self._initiate_track(det)
 
         # 6. Prune
         self._prune_tracks()
