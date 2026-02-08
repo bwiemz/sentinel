@@ -41,3 +41,34 @@ def mahalanobis_distance(kf: KalmanFilter, measurement: np.ndarray) -> float:
 def centroid_distance(pos_a: np.ndarray, pos_b: np.ndarray) -> float:
     """Euclidean distance between two 2D points."""
     return float(np.linalg.norm(pos_a - pos_b))
+
+
+def track_to_track_mahalanobis(
+    pos1: np.ndarray,
+    cov1: np.ndarray,
+    pos2: np.ndarray,
+    cov2: np.ndarray,
+) -> float:
+    """Squared Mahalanobis distance between two track position estimates.
+
+    d² = (x1 - x2)' * (P1 + P2)^{-1} * (x1 - x2)
+
+    Used for track-to-track correlation in multi-sensor fusion.
+    Under correct association with Gaussian states, d² ~ chi²(dim).
+
+    Args:
+        pos1: Position estimate from track 1.
+        cov1: Position covariance from track 1.
+        pos2: Position estimate from track 2.
+        cov2: Position covariance from track 2.
+
+    Returns:
+        Squared Mahalanobis distance (non-negative scalar).
+        Returns inf if the combined covariance is singular.
+    """
+    dx = np.asarray(pos1, dtype=float) - np.asarray(pos2, dtype=float)
+    S = np.asarray(cov1, dtype=float) + np.asarray(cov2, dtype=float)
+    try:
+        return float(dx @ np.linalg.solve(S, dx))
+    except np.linalg.LinAlgError:
+        return float("inf")

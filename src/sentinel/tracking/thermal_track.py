@@ -38,6 +38,7 @@ class ThermalTrack(TrackBase):
             tentative_delete_misses=tentative_delete_misses,
             confirmed_coast_misses=confirmed_coast_misses,
             coast_reconfirm_hits=coast_reconfirm_hits,
+            measurement_dim=1,
         )
 
         # Initialize EKF
@@ -59,11 +60,45 @@ class ThermalTrack(TrackBase):
     def update(self, detection: Detection) -> None:
         az_rad = azimuth_deg_to_rad(detection.azimuth_deg or 0.0)
         z = np.array([az_rad])
+
+        # Record NIS before update for filter consistency monitoring
+        if self.quality_monitor is not None:
+            innovation = z - self.ekf.predicted_measurement
+            innovation[0] = (innovation[0] + np.pi) % (2 * np.pi) - np.pi
+            self.quality_monitor.record_innovation(innovation, self.ekf.innovation_covariance)
+
         self.ekf.update(z)
 
         self.last_detection = detection
+        self.last_update_time = detection.timestamp
         self._last_temperature_k = detection.temperature_k
         self._record_hit()
+
+    def predict_to_time(self, target_time: float) -> tuple[np.ndarray, np.ndarray]:
+        """Non-mutating forward prediction to a target time.
+
+        Propagates the current state/covariance to target_time without
+        modifying the track's internal EKF state.
+
+        Args:
+            target_time: Target epoch in seconds.
+
+        Returns:
+            (x_pred, P_pred) — predicted 4D state and covariance.
+        """
+        dt = target_time - self.last_update_time
+        if dt <= 0:
+            return self.ekf.x.copy(), self.ekf.P.copy()
+
+        n = self.ekf.dim_state
+        F = np.eye(n)
+        # BearingOnlyEKF: state [x, vx, y, vy]
+        F[0, 1] = dt
+        F[2, 3] = dt
+
+        x_pred = F @ self.ekf.x
+        P_pred = F @ self.ekf.P @ F.T + self.ekf.Q
+        return x_pred, P_pred
 
     def mark_missed(self) -> None:
         self._record_miss()

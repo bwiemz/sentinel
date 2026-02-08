@@ -173,11 +173,13 @@ class FilterConfig(BaseModel):
 
 
 class AssociationConfig(BaseModel):
-    method: Literal["hungarian"] = "hungarian"
+    method: Literal["hungarian", "jpda"] = "hungarian"
     gate_threshold: float = Field(default=9.21, gt=0)
     iou_weight: float = Field(default=0.5, ge=0, le=1)
     mahalanobis_weight: float = Field(default=0.5, ge=0, le=1)
     cascaded: bool = False
+    detection_probability: float = Field(default=0.9, ge=0, le=1)
+    false_alarm_density: float = Field(default=1e-6, ge=0)
 
 
 class TrackManagementConfig(BaseModel):
@@ -206,10 +208,12 @@ class RadarFilterConfig(BaseModel):
 
 
 class RadarAssociationConfig(BaseModel):
-    method: Literal["hungarian"] = "hungarian"
+    method: Literal["hungarian", "jpda"] = "hungarian"
     gate_threshold: float = Field(default=9.21, gt=0)
     velocity_gate_mps: float | None = None
     cascaded: bool = False
+    detection_probability: float = Field(default=0.9, ge=0, le=1)
+    false_alarm_density: float = Field(default=1e-6, ge=0)
 
 
 class RadarTrackMgmtConfig(BaseModel):
@@ -231,8 +235,10 @@ class ThermalFilterConfig(BaseModel):
 
 
 class ThermalAssociationConfig(BaseModel):
-    method: Literal["hungarian"] = "hungarian"
+    method: Literal["hungarian", "jpda"] = "hungarian"
     gate_threshold: float = Field(default=6.635, gt=0)
+    detection_probability: float = Field(default=0.9, ge=0, le=1)
+    false_alarm_density: float = Field(default=1e-6, ge=0)
 
 
 class ThermalTrackMgmtConfig(BaseModel):
@@ -253,10 +259,16 @@ class QuantumRadarTrackingConfig(BaseModel):
     track_management: RadarTrackMgmtConfig = Field(default_factory=RadarTrackMgmtConfig)
 
 
+class TrackQualityConfig(BaseModel):
+    enabled: bool = True
+    nis_window_size: int = Field(default=20, gt=0)
+
+
 class TrackingConfig(BaseModel):
     filter: FilterConfig = Field(default_factory=FilterConfig)
     association: AssociationConfig = Field(default_factory=AssociationConfig)
     track_management: TrackManagementConfig = Field(default_factory=TrackManagementConfig)
+    track_quality: TrackQualityConfig = Field(default_factory=TrackQualityConfig)
     radar: RadarTrackingConfig = Field(default_factory=RadarTrackingConfig)
     thermal: ThermalTrackingConfig = Field(default_factory=ThermalTrackingConfig)
     quantum_radar: QuantumRadarTrackingConfig = Field(default_factory=QuantumRadarTrackingConfig)
@@ -283,6 +295,9 @@ class FusionConfig(BaseModel):
     azimuth_gate_deg: float = Field(default=5.0, gt=0)
     thermal_azimuth_gate_deg: float = Field(default=3.0, gt=0)
     min_fusion_quality: float = Field(default=0.3, ge=0, le=1)
+    temporal_alignment: bool = False
+    use_statistical_distance: bool = False
+    statistical_distance_gate: float = Field(default=9.21, gt=0)
     multifreq_correlation: MultiFreqCorrelationConfig = Field(default_factory=MultiFreqCorrelationConfig)
     threat_classification: ThreatClassificationConfig = Field(default_factory=ThreatClassificationConfig)
 

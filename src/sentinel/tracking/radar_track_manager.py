@@ -7,6 +7,7 @@ import logging
 from omegaconf import DictConfig
 
 from sentinel.core.types import Detection, TrackState
+from sentinel.tracking.jpda import RadarJPDAAssociator
 from sentinel.tracking.radar_association import RadarAssociator
 from sentinel.tracking.radar_track import RadarTrack
 
@@ -42,6 +43,15 @@ class RadarTrackManager:
             cascaded=config.association.get("cascaded", False),
         )
 
+        # Optional JPDA associator
+        self._jpda: RadarJPDAAssociator | None = None
+        if config.association.get("method", "hungarian") == "jpda":
+            self._jpda = RadarJPDAAssociator(
+                gate_threshold=config.association.get("gate_threshold", 9.21),
+                P_D=config.association.get("detection_probability", 0.9),
+                false_alarm_density=config.association.get("false_alarm_density", 1e-6),
+            )
+
     def step(self, detections: list[Detection]) -> list[RadarTrack]:
         """Process one radar scan of detections. Returns active tracks.
 
@@ -59,16 +69,16 @@ class RadarTrackManager:
 
         active = [t for t in self._tracks.values() if t.is_alive]
 
-        # 2. Associate
-        result = self._associator.associate(active, detections)
-
-        # 3. Update matched
-        for track_idx, det_idx in result.matched_pairs:
-            active[track_idx].update(detections[det_idx])
-
-        # 4. Mark unmatched as missed
-        for track_idx in result.unmatched_tracks:
-            active[track_idx].mark_missed()
+        if self._jpda is not None:
+            result = self._jpda.associate_and_update(active, detections)
+            for track_idx in result.unmatched_tracks:
+                active[track_idx].mark_missed()
+        else:
+            result = self._associator.associate(active, detections)
+            for track_idx, det_idx in result.matched_pairs:
+                active[track_idx].update(detections[det_idx])
+            for track_idx in result.unmatched_tracks:
+                active[track_idx].mark_missed()
 
         # 5. Initiate new tracks
         for det_idx in result.unmatched_detections:

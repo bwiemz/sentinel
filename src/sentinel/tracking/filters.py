@@ -398,6 +398,11 @@ class BearingOnlyEKF:
         return self.h(self.x)
 
     @property
+    def innovation_covariance(self) -> np.ndarray:
+        H = self.H_jacobian(self.x)
+        return H @ self.P @ H.T + self.R
+
+    @property
     def position(self) -> np.ndarray:
         return np.array([self.x[0], self.x[2]])
 

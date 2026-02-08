@@ -59,6 +59,7 @@ class RadarTrack(TrackBase):
         use_3d: bool = False,
         use_doppler: bool = False,
     ):
+        _meas_dim = 3 if use_3d or use_doppler else 2
         super().__init__(
             track_id=track_id,
             confirm_hits=confirm_hits,
@@ -67,6 +68,7 @@ class RadarTrack(TrackBase):
             tentative_delete_misses=tentative_delete_misses,
             confirmed_coast_misses=confirmed_coast_misses,
             coast_reconfirm_hits=coast_reconfirm_hits,
+            measurement_dim=_meas_dim,
         )
         self._use_3d = use_3d
         self._use_doppler = use_doppler
@@ -115,17 +117,73 @@ class RadarTrack(TrackBase):
             if self._use_3d:
                 el_rad = np.radians(detection.elevation_deg or 0.0)
                 z = np.array([detection.range_m, az_rad, el_rad])
+                if self.quality_monitor is not None:
+                    innovation = z - self.ekf.predicted_measurement
+                    innovation[1] = (innovation[1] + np.pi) % (2 * np.pi) - np.pi
+                    innovation[2] = (innovation[2] + np.pi) % (2 * np.pi) - np.pi
+                    self.quality_monitor.record_innovation(innovation, self.ekf.innovation_covariance)
                 self.ekf.update(z)
             elif self._use_doppler and detection.velocity_mps is not None:
                 z = np.array([detection.range_m, az_rad, detection.velocity_mps])
+                if self.quality_monitor is not None:
+                    innovation = z - self.ekf.predicted_measurement
+                    innovation[1] = (innovation[1] + np.pi) % (2 * np.pi) - np.pi
+                    self.quality_monitor.record_innovation(innovation, self.ekf.innovation_covariance)
                 self.ekf.update(z)
             elif not self._use_doppler:
                 z = np.array([detection.range_m, az_rad])
+                if self.quality_monitor is not None:
+                    innovation = z - self.ekf.predicted_measurement
+                    innovation[1] = (innovation[1] + np.pi) % (2 * np.pi) - np.pi
+                    self.quality_monitor.record_innovation(innovation, self.ekf.innovation_covariance)
                 self.ekf.update(z)
             # If use_doppler but no velocity_mps, skip EKF update (predict-only)
 
         self.last_detection = detection
+        self.last_update_time = detection.timestamp
         self._record_hit()
+
+    def predict_to_time(self, target_time: float) -> tuple[np.ndarray, np.ndarray]:
+        """Non-mutating forward prediction to a target time.
+
+        Propagates the current state/covariance to target_time without
+        modifying the track's internal EKF state.
+
+        Args:
+            target_time: Target epoch in seconds.
+
+        Returns:
+            (x_pred, P_pred) — predicted state vector and covariance.
+        """
+        dt = target_time - self.last_update_time
+        if dt <= 0:
+            return self.ekf.x.copy(), self.ekf.P.copy()
+
+        n = self.ekf.dim_state
+        F = np.eye(n)
+        if n == 6:
+            # CA / 3D state layout: [x, vx, ax, y, vy, ay] or [x, vx, y, vy, z, vz]
+            if self._use_3d:
+                # 3D CV: [x, vx, y, vy, z, vz]
+                F[0, 1] = dt
+                F[2, 3] = dt
+                F[4, 5] = dt
+            else:
+                # CA: [x, vx, ax, y, vy, ay]
+                F[0, 1] = dt
+                F[0, 2] = 0.5 * dt * dt
+                F[1, 2] = dt
+                F[3, 4] = dt
+                F[3, 5] = 0.5 * dt * dt
+                F[4, 5] = dt
+        else:
+            # CV: [x, vx, y, vy]
+            F[0, 1] = dt
+            F[2, 3] = dt
+
+        x_pred = F @ self.ekf.x
+        P_pred = F @ self.ekf.P @ F.T + self.ekf.Q
+        return x_pred, P_pred
 
     def mark_missed(self) -> None:
         """Mark this track as having no associated detection this scan."""

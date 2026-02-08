@@ -210,6 +210,9 @@ class SentinelPipeline:
             camera_hfov_deg=fusion_cfg.get("camera_hfov_deg", 60.0),
             image_width_px=cam_cfg.get("width", 1280),
             azimuth_gate_deg=fusion_cfg.get("azimuth_gate_deg", 5.0),
+            use_temporal_alignment=fusion_cfg.get("temporal_alignment", False),
+            use_statistical_distance=fusion_cfg.get("use_statistical_distance", False),
+            statistical_distance_gate=fusion_cfg.get("statistical_distance_gate", 9.21),
         )
 
         logger.info("Radar subsystem initialized (simulator mode, %.0f Hz)", radar_cfg.get("scan_rate_hz", 10))
@@ -331,6 +334,9 @@ class SentinelPipeline:
             min_fusion_quality=fusion_cfg.get("min_fusion_quality", 0.0),
             hypersonic_temp_threshold_k=threat_cfg.get("hypersonic_temp_threshold_k", 1500.0),
             stealth_rcs_variation_db=threat_cfg.get("stealth_rcs_variation_db", 15.0),
+            use_temporal_alignment=fusion_cfg.get("temporal_alignment", False),
+            use_statistical_distance=fusion_cfg.get("use_statistical_distance", False),
+            statistical_distance_gate=fusion_cfg.get("statistical_distance_gate", 9.21),
         )
 
         logger.info("Multi-sensor fusion initialized (camera + radar + thermal)")

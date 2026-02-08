@@ -54,6 +54,7 @@ class Track(TrackBase):
             tentative_delete_misses=tentative_delete_misses,
             confirmed_coast_misses=confirmed_coast_misses,
             coast_reconfirm_hits=coast_reconfirm_hits,
+            measurement_dim=2,
         )
         if filter_type == "ca":
             self.kf = ConstantAccelerationKF(dim_state=6, dim_meas=2, dt=dt)
@@ -98,15 +99,57 @@ class Track(TrackBase):
         if detection.bbox is not None:
             center = detection.bbox_center
             if center is not None:
+                # Record NIS before update for filter consistency monitoring
+                if self.quality_monitor is not None:
+                    innovation = center - self.kf.predicted_measurement
+                    S = self.kf.innovation_covariance
+                    self.quality_monitor.record_innovation(innovation, S)
+
                 self.kf.update(center)
 
         self.last_detection = detection
+        self.last_update_time = detection.timestamp
 
         # Update class histogram
         if detection.class_name:
             self.class_histogram[detection.class_name] = self.class_histogram.get(detection.class_name, 0) + 1
 
         self._record_hit()
+
+    def predict_to_time(self, target_time: float) -> tuple[np.ndarray, np.ndarray]:
+        """Non-mutating forward prediction to a target time.
+
+        Propagates the current state/covariance to target_time without
+        modifying the track's internal filter state.
+
+        Args:
+            target_time: Target epoch in seconds.
+
+        Returns:
+            (x_pred, P_pred) — predicted state vector and covariance.
+        """
+        dt = target_time - self.last_update_time
+        if dt <= 0:
+            return self.kf.x.copy(), self.kf.P.copy()
+
+        n = self.kf.dim_state
+        F = np.eye(n)
+        if n == 6:
+            # CA state layout: [x, vx, ax, y, vy, ay]
+            F[0, 1] = dt
+            F[0, 2] = 0.5 * dt * dt
+            F[1, 2] = dt
+            F[3, 4] = dt
+            F[3, 5] = 0.5 * dt * dt
+            F[4, 5] = dt
+        else:
+            # CV state layout: [x, vx, y, vy]
+            F[0, 1] = dt
+            F[2, 3] = dt
+
+        x_pred = F @ self.kf.x
+        P_pred = F @ self.kf.P @ F.T + self.kf.Q
+        return x_pred, P_pred
 
     def mark_missed(self) -> None:
         """Mark this track as having no associated detection this frame."""

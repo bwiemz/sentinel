@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import deque
 
 from sentinel.core.types import TrackState, generate_track_id
+from sentinel.tracking.track_quality import FilterConsistencyMonitor
 
 
 class TrackBase:
@@ -39,6 +40,7 @@ class TrackBase:
         tentative_delete_misses: int = 3,
         confirmed_coast_misses: int = 5,
         coast_reconfirm_hits: int = 2,
+        measurement_dim: int | None = None,
     ):
         self.track_id = track_id or generate_track_id()
         self.state = TrackState.TENTATIVE
@@ -50,6 +52,14 @@ class TrackBase:
         self.consecutive_misses = 0
         self.age = 0
         self.score = 0.0
+
+        # Temporal alignment support
+        self.last_update_time: float = 0.0
+
+        # Filter consistency monitoring (NIS-based)
+        self.quality_monitor: FilterConsistencyMonitor | None = None
+        if measurement_dim is not None:
+            self.quality_monitor = FilterConsistencyMonitor(dim_meas=measurement_dim)
 
         # Configurable thresholds
         self._confirm_hits = confirm_hits
@@ -112,14 +122,30 @@ class TrackBase:
         return self.consecutive_hits >= self._confirm_hits
 
     def _update_score(self) -> None:
-        """Compute track quality score in [0, 1]."""
+        """Compute track quality score in [0, 1].
+
+        Incorporates NIS-based filter consistency when quality monitor
+        is active. Weights: hit_ratio 0.3, recency 0.25, confirmation 0.25,
+        filter consistency 0.2.
+        """
         if self.age == 0:
             self.score = 0.5
             return
         hit_ratio = self.hits / max(self.age, 1)
         recency = max(0, 1.0 - self.consecutive_misses * 0.15)
         confirmation = 1.0 if self.state == TrackState.CONFIRMED else 0.5
-        self.score = min(1.0, hit_ratio * 0.4 + recency * 0.3 + confirmation * 0.3)
+
+        if self.quality_monitor is not None and self.quality_monitor.sample_count >= 3:
+            quality_factor = self.quality_monitor.consistency_score
+            self.score = min(
+                1.0,
+                hit_ratio * 0.3
+                + recency * 0.25
+                + confirmation * 0.25
+                + quality_factor * 0.2,
+            )
+        else:
+            self.score = min(1.0, hit_ratio * 0.4 + recency * 0.3 + confirmation * 0.3)
 
     @property
     def is_alive(self) -> bool:

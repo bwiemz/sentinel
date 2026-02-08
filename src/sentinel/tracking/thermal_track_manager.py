@@ -5,6 +5,7 @@ from __future__ import annotations
 from omegaconf import DictConfig
 
 from sentinel.core.types import Detection, TrackState
+from sentinel.tracking.jpda import ThermalJPDAAssociator
 from sentinel.tracking.thermal_association import ThermalAssociator
 from sentinel.tracking.thermal_track import ThermalTrack
 
@@ -25,6 +26,16 @@ class ThermalTrackManager:
         self._associator = ThermalAssociator(gate_threshold=gate)
         self._tracks: dict[str, ThermalTrack] = {}
 
+        # Optional JPDA associator
+        assoc_cfg = config.get("association", {})
+        self._jpda: ThermalJPDAAssociator | None = None
+        if assoc_cfg.get("method", "hungarian") == "jpda":
+            self._jpda = ThermalJPDAAssociator(
+                gate_threshold=gate,
+                P_D=assoc_cfg.get("detection_probability", 0.9),
+                false_alarm_density=assoc_cfg.get("false_alarm_density", 1e-6),
+            )
+
         # Lifecycle thresholds (configurable)
         tm = config.get("track_management", {})
         self._confirm_window = tm.get("confirm_window", None)
@@ -40,16 +51,17 @@ class ThermalTrackManager:
         for track in active:
             track.predict()
 
-        # 2. Associate
-        result = self._associator.associate(active, detections)
-
-        # 3. Update matched
-        for ti, di in result.matched_pairs:
-            active[ti].update(detections[di])
-
-        # 4. Mark unmatched as missed
-        for ti in result.unmatched_tracks:
-            active[ti].mark_missed()
+        # 2. Associate (+ update for JPDA)
+        if self._jpda is not None:
+            result = self._jpda.associate_and_update(active, detections)
+            for ti in result.unmatched_tracks:
+                active[ti].mark_missed()
+        else:
+            result = self._associator.associate(active, detections)
+            for ti, di in result.matched_pairs:
+                active[ti].update(detections[di])
+            for ti in result.unmatched_tracks:
+                active[ti].mark_missed()
 
         # 5. Initiate new tracks
         for di in result.unmatched_detections:

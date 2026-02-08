@@ -32,19 +32,22 @@ Quantum Radar ──> RadarTrackManager (EKF) ───────────�
   (QI X-band)       (reuses existing EKF)
 ```
 
-Four independent sensor paths run at their native rates. Tracks are fused by angular correspondence (Hungarian algorithm) and classified by threat level. The quantum radar reuses the existing radar EKF pipeline -- quantum advantage manifests in detection probability, not measurement format.
+Four independent sensor paths run at their native rates. Tracks are fused by angular correspondence or statistical (Mahalanobis) distance, with optional temporal alignment to a common epoch. Data association uses either the Hungarian algorithm (hard assignment) or JPDA (soft probabilistic assignment). Targets are classified by threat level. The quantum radar reuses the existing radar EKF pipeline -- quantum advantage manifests in detection probability, not measurement format.
 
 ## Key Capabilities
 
 - **Object detection**: YOLOv8 on camera frames (USB, RTSP, or video file)
 - **Kalman filter tracking**: Predict-update cycle with automatic track lifecycle (tentative -> confirmed -> coasting -> deleted)
-- **Globally optimal association**: Hungarian algorithm on combined IoU + Mahalanobis cost matrices
+- **Data association**: Hungarian algorithm (globally optimal hard assignment) or JPDA (Joint Probabilistic Data Association -- soft probabilistic assignment with spread-of-innovations covariance for dense/crossing target scenarios)
 - **Radar tracking**: Extended Kalman Filter in polar coordinates with simulated radar returns
 - **Multi-frequency radar**: 5-band simulation (VHF/UHF/L/S/X) with frequency-dependent RCS, plasma sheath attenuation modeling
 - **Thermal imaging**: Passive FLIR simulation (MWIR/LWIR) with bearing-only tracking -- no range, unaffected by plasma
 - **Stealth detection**: Radar-absorbing materials absorb X-band but not VHF/UHF. Cross-band RCS variation flags stealth candidates
 - **Hypersonic detection**: Mach 5+ targets create extreme thermal signatures (>1500K) that thermal sensors always detect, even when radar is degraded by plasma sheath
 - **Quantum illumination radar**: Entangled microwave photon pairs (TMSV state) for enhanced stealth detection at X-band where classical radar fails. OPA/SFG/Phase-Conjugate receiver models. 6 dB SNR advantage over classical at same energy budget
+- **Track quality monitoring**: Normalized Innovation Squared (NIS) metrics with rolling-window filter consistency monitor (nominal/over-confident/under-confident/diverged health states)
+- **Temporal alignment**: Predict all tracks to a common reference epoch before fusion using constant-velocity propagation with CWNA process noise -- eliminates 171m error at Mach 5 per 100ms sensor time offset
+- **Statistical fusion**: Mahalanobis track-to-track distance replaces angular heuristics for cross-sensor correlation, with camera-to-world coordinate projection
 - **Threat classification**: CRITICAL (hypersonic, quantum-confirmed stealth), HIGH (stealth, quantum-only), MEDIUM (multi-sensor conventional), LOW (single-sensor)
 - **Military HUD**: Real-time overlay with track boxes, velocity vectors, targeting reticle, radar/thermal/quantum blips, threat badges, and stealth/hypersonic alert banners
 
@@ -75,10 +78,10 @@ sentinel --model yolov8s.pt --device cuda:0
 ### Test
 
 ```bash
-pytest tests/unit/ -v
+pytest tests/ -v
 ```
 
-411 tests covering all subsystems.
+774 tests covering all subsystems.
 
 ## Configuration
 
@@ -93,10 +96,12 @@ All settings live in `config/default.yaml` under the `sentinel:` namespace. Key 
 | `sensors.quantum_radar` | Quantum illumination radar (QI X-band, TMSV source) |
 | `detection` | YOLOv8 model, confidence, device |
 | `tracking` | Kalman filter params, association gating, track lifecycle |
+| `tracking.association` | Association method (`hungarian`/`jpda`), JPDA parameters |
+| `tracking.track_quality` | NIS monitoring (enabled, window size) |
 | `tracking.radar` | EKF params for radar tracking |
 | `tracking.thermal` | Bearing-only EKF params for thermal tracking |
 | `tracking.quantum_radar` | EKF params for quantum radar tracking |
-| `fusion` | Azimuth gates, multi-freq correlation, threat thresholds |
+| `fusion` | Azimuth gates, temporal alignment, statistical distance, threat thresholds |
 | `ui.hud` | HUD colors, overlay alpha, scanline effect |
 
 Enable multi-freq radar, thermal, and quantum radar by setting `enabled: true` in their respective sections. When disabled, the system runs in camera-only or camera+single-radar mode (backward compatible).
@@ -127,10 +132,13 @@ sentinel/
       yolo.py                 # YOLOv8 detector wrapper
     tracking/
       filters.py              # KalmanFilter, ExtendedKalmanFilter, BearingOnlyEKF
+      base_track.py           # TrackBase (shared state machine, M-of-N, scoring, quality monitor)
       track.py                # Camera Track (KF-based)
       track_manager.py        # Camera track lifecycle manager
       association.py          # Hungarian associator (IoU + Mahalanobis)
-      cost_functions.py       # Cost matrix computation
+      jpda.py                 # JPDA associators (camera, radar, thermal)
+      cost_functions.py       # Cost matrix computation + track-to-track Mahalanobis
+      track_quality.py        # NIS/NEES metrics, FilterConsistencyMonitor
       radar_track.py          # Radar Track (EKF-based, polar coords)
       radar_association.py    # Radar Hungarian associator
       radar_track_manager.py  # Radar track lifecycle
@@ -138,15 +146,17 @@ sentinel/
       thermal_association.py  # Thermal bearing-based associator
       thermal_track_manager.py # Thermal track lifecycle
     fusion/
-      track_fusion.py         # Camera-radar fusion (Phase 4)
+      track_fusion.py         # Camera-radar fusion (angular + statistical)
+      temporal_alignment.py   # Predict tracks to common epoch (CV + CWNA)
       multifreq_correlator.py # Cross-band detection grouping
-      multi_sensor_fusion.py  # 3-sensor fusion + threat classification
+      multi_sensor_fusion.py  # 4-sensor fusion + threat classification
     ui/hud/
       renderer.py             # HUD compositor
       elements.py             # Drawing primitives (boxes, blips, alerts)
       styles.py               # Colors, fonts, visual config
-  tests/unit/
-    test_*.py                 # 411 unit tests
+  tests/
+    unit/test_*.py            # 756 unit tests
+    integration/test_*.py     # 18 integration tests
 ```
 
 ## Physics Models
@@ -232,6 +242,9 @@ P_total = 1 - product(1 - P_i)
 | 4 | Radar sensor fusion with Extended Kalman Filter | `15eb377` |
 | 5 | Multi-frequency radar + thermal imaging for stealth/hypersonic detection | `5ac63ad` |
 | 6 | Quantum illumination radar for enhanced stealth detection | -- |
+| 7 | Algorithm optimization: CA-KF, IMM, 3D/Doppler EKF, cascaded association | `e3d3947` |
+| 8 | Production hardening: error handling, validation, logging, CI/CD | `ca46515` |
+| 9 | Association & fusion integrity: JPDA, temporal alignment, statistical distance, NIS monitoring | -- |
 
 ## Dependencies
 

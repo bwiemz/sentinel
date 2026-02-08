@@ -14,6 +14,8 @@ from scipy.optimize import linear_sum_assignment
 
 from sentinel.core.types import SensorType, generate_track_id
 from sentinel.fusion.state_fusion import covariance_intersection
+from sentinel.fusion.temporal_alignment import align_tracks_to_epoch, _extract_position_cov
+from sentinel.tracking.cost_functions import track_to_track_mahalanobis
 from sentinel.tracking.radar_track import RadarTrack
 from sentinel.tracking.track import Track
 
@@ -82,11 +84,17 @@ class TrackFusion:
         image_width_px: int = 1280,
         azimuth_gate_deg: float = 5.0,
         use_ci_fusion: bool = False,
+        use_temporal_alignment: bool = False,
+        use_statistical_distance: bool = False,
+        statistical_distance_gate: float = 9.21,
     ):
         self._hfov_deg = camera_hfov_deg
         self._img_width = image_width_px
         self._gate_deg = azimuth_gate_deg
         self._use_ci = use_ci_fusion
+        self._use_temporal_alignment = use_temporal_alignment
+        self._use_statistical_distance = use_statistical_distance
+        self._stat_gate = statistical_distance_gate
 
         # Persistent fused track ID mapping: (cam_id, rdr_id) -> fused_id
         self._fused_id_map: dict[tuple[str, str], str] = {}
@@ -110,7 +118,10 @@ class TrackFusion:
         fused: list[FusedTrack] = []
 
         if camera_tracks and radar_tracks:
-            cost = self._build_correlation_cost(camera_tracks, radar_tracks)
+            if self._use_statistical_distance:
+                cost = self._build_statistical_correlation_cost(camera_tracks, radar_tracks)
+            else:
+                cost = self._build_correlation_cost(camera_tracks, radar_tracks)
             row_indices, col_indices = linear_sum_assignment(cost)
 
             matched_cam: set[int] = set()
@@ -169,6 +180,62 @@ class TrackFusion:
                 ang_dist = self._angular_distance(cam_az, rt.azimuth_deg)
                 if ang_dist <= self._gate_deg:
                     cost[i, j] = ang_dist
+
+        return cost
+
+    def _build_statistical_correlation_cost(
+        self,
+        camera_tracks: list[Track],
+        radar_tracks: list[RadarTrack],
+    ) -> np.ndarray:
+        """Build cost matrix using track-to-track Mahalanobis distance.
+
+        Projects camera pixel positions to world coordinates using radar
+        range estimates, then computes Mahalanobis distance in world frame.
+        Optionally aligns tracks to a common reference epoch first.
+        Uses angular gating as a fast pre-filter.
+        """
+        N = len(camera_tracks)
+        M = len(radar_tracks)
+        cost = np.full((N, M), _INFEASIBLE)
+
+        # Optionally align radar tracks to common epoch
+        if self._use_temporal_alignment:
+            all_times = [t.last_update_time for t in camera_tracks] + \
+                        [t.last_update_time for t in radar_tracks]
+            ref_time = max(all_times) if all_times else 0.0
+            rdr_aligned = align_tracks_to_epoch(radar_tracks, ref_time)
+        else:
+            rdr_aligned = None
+
+        for i, ct in enumerate(camera_tracks):
+            cam_az_deg = self.pixel_to_azimuth(ct.position[0])
+            cam_az_rad = np.radians(cam_az_deg)
+
+            for j, rt in enumerate(radar_tracks):
+                ang_dist = self._angular_distance(cam_az_deg, rt.azimuth_deg)
+                if ang_dist > self._gate_deg:
+                    continue
+
+                # Project camera bearing to world frame at radar range
+                cam_world = np.array([
+                    rt.range_m * np.cos(cam_az_rad),
+                    rt.range_m * np.sin(cam_az_rad),
+                ])
+                # Camera covariance in world: scale pixel uncertainty to meters
+                px_to_m = rt.range_m * np.radians(self._hfov_deg) / self._img_width
+                cam_cov = np.eye(2) * (px_to_m ** 2) * ct.kf.P[0, 0]
+
+                # Radar position and covariance
+                if rdr_aligned is not None:
+                    pos_r = rdr_aligned[j].position
+                    cov_r = rdr_aligned[j].covariance
+                else:
+                    pos_r, cov_r = _extract_position_cov(rt.ekf.x, rt.ekf.P)
+
+                d2 = track_to_track_mahalanobis(cam_world, cam_cov, pos_r, cov_r)
+                if d2 <= self._stat_gate:
+                    cost[i, j] = d2
 
         return cost
 

@@ -12,6 +12,7 @@ from omegaconf import DictConfig
 
 from sentinel.core.types import Detection, TrackState
 from sentinel.tracking.association import HungarianAssociator
+from sentinel.tracking.jpda import JPDAAssociator
 from sentinel.tracking.track import Track
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,15 @@ class TrackManager:
             cascaded=config.association.get("cascaded", False),
         )
 
+        # Optional JPDA associator (replaces Hungarian when enabled)
+        self._jpda: JPDAAssociator | None = None
+        if config.association.get("method", "hungarian") == "jpda":
+            self._jpda = JPDAAssociator(
+                gate_threshold=config.association.get("gate_threshold", 9.21),
+                P_D=config.association.get("detection_probability", 0.9),
+                false_alarm_density=config.association.get("false_alarm_density", 1e-6),
+            )
+
     def step(self, detections: list[Detection]) -> list[Track]:
         """Process one frame of detections. Returns active tracks.
 
@@ -67,16 +77,19 @@ class TrackManager:
 
         active = [t for t in self._tracks.values() if t.is_alive]
 
-        # 2. Associate (Hungarian algorithm for optimal assignment)
-        result = self._associator.associate(active, detections)
-
-        # 3. Update matched tracks
-        for track_idx, det_idx in result.matched_pairs:
-            active[track_idx].update(detections[det_idx])
-
-        # 4. Mark unmatched tracks as missed
-        for track_idx in result.unmatched_tracks:
-            active[track_idx].mark_missed()
+        if self._jpda is not None:
+            # JPDA handles association + update in one step
+            result = self._jpda.associate_and_update(active, detections)
+            # Mark tracks that had no gated detections
+            for track_idx in result.unmatched_tracks:
+                active[track_idx].mark_missed()
+        else:
+            # Hungarian association + separate update
+            result = self._associator.associate(active, detections)
+            for track_idx, det_idx in result.matched_pairs:
+                active[track_idx].update(detections[det_idx])
+            for track_idx in result.unmatched_tracks:
+                active[track_idx].mark_missed()
 
         # 5. Initiate new tracks from unmatched detections
         for det_idx in result.unmatched_detections:

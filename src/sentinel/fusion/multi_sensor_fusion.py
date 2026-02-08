@@ -100,12 +100,19 @@ class MultiSensorFusion:
         min_fusion_quality: float = 0.0,
         hypersonic_temp_threshold_k: float = 1500.0,
         stealth_rcs_variation_db: float = 15.0,
+        use_temporal_alignment: bool = False,
+        use_statistical_distance: bool = False,
+        statistical_distance_gate: float = 9.21,
     ):
         self._base_fusion = TrackFusion(
             camera_hfov_deg=camera_hfov_deg,
             image_width_px=image_width_px,
             azimuth_gate_deg=azimuth_gate_deg,
+            use_temporal_alignment=use_temporal_alignment,
+            use_statistical_distance=use_statistical_distance,
+            statistical_distance_gate=statistical_distance_gate,
         )
+        self._use_temporal_alignment = use_temporal_alignment
         self._thermal_gate_deg = thermal_azimuth_gate_deg
         self._hfov_deg = camera_hfov_deg
         self._img_width = image_width_px

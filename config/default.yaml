@@ -175,11 +175,17 @@ sentinel:
         transition_prob: 0.98      # Markov mode-stay probability (IMM only)
 
     association:
-      method: "hungarian"
+      method: "hungarian"          # "hungarian" or "jpda"
       gate_threshold: 9.21         # chi2(2df) at 99%
       iou_weight: 0.5
       mahalanobis_weight: 0.5
       cascaded: false              # two-pass: confirmed tracks first
+      detection_probability: 0.9   # JPDA P_D parameter
+      false_alarm_density: 1.0e-6  # JPDA clutter density
+
+    track_quality:
+      enabled: true
+      nis_window_size: 20          # rolling window for NIS averaging
 
     track_management:
       confirm_hits: 3
@@ -202,10 +208,12 @@ sentinel:
           range_m: 5.0
           azimuth_deg: 1.0
       association:
-        method: "hungarian"
+        method: "hungarian"          # "hungarian" or "jpda"
         gate_threshold: 9.21
         velocity_gate_mps: null    # radial velocity gate (null=disabled)
         cascaded: false            # two-pass: confirmed tracks first
+        detection_probability: 0.9   # JPDA P_D
+        false_alarm_density: 1.0e-6  # JPDA clutter density
       track_management:
         confirm_hits: 3
         max_coast_frames: 5
@@ -217,8 +225,10 @@ sentinel:
         dt: 0.033                    # 1/30 Hz thermal
         assumed_initial_range_m: 10000.0
       association:
-        method: "hungarian"
+        method: "hungarian"          # "hungarian" or "jpda"
         gate_threshold: 6.635       # chi2(1df) at 99% -- bearing-only is 1 DOF
+        detection_probability: 0.9   # JPDA P_D
+        false_alarm_density: 1.0e-6  # JPDA clutter density
       track_management:
         confirm_hits: 3
         max_coast_frames: 10
@@ -246,6 +256,9 @@ sentinel:
     azimuth_gate_deg: 5.0
     thermal_azimuth_gate_deg: 3.0
     min_fusion_quality: 0.3
+    temporal_alignment: false         # predict tracks to common epoch before fusion
+    use_statistical_distance: false   # Mahalanobis track-to-track for correlation
+    statistical_distance_gate: 9.21   # chi2(2df) gate for statistical correlation
     multifreq_correlation:
       range_gate_m: 500.0
       azimuth_gate_deg: 3.0
