@@ -52,6 +52,10 @@ Four independent sensor paths run at their native rates. Tracks are fused by ang
 - **Military HUD**: Real-time overlay with track boxes, velocity vectors, targeting reticle, radar/thermal/quantum blips, threat badges, and stealth/hypersonic alert banners
 - **Web dashboard**: Real-time browser-based monitoring via FastAPI/WebSocket -- tactical PPI radar scope, sortable track table, threat cards, per-stage latency bars, MJPEG HUD video feed. Military dark theme, vanilla JS (no build step)
 
+### Web Dashboard
+
+![SENTINEL Web Dashboard](docs/images/web-dashboard.png)
+
 ## Quick Start
 
 ### Install
