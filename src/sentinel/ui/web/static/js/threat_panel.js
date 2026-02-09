@@ -94,10 +94,12 @@ window.ThreatPanel = (function () {
       var badge = el.children[0];
       if (badge.style.background !== color) badge.style.background = color;
 
-      // Update text
+      // Update text — now includes intent and confidence (Phase 18)
       var text = t.threat_level + " | " +
         (t.fused_id || "").substring(0, 8) +
         (t.range_m != null ? " | R:" + (t.range_m / 1000).toFixed(1) + "km" : "") +
+        (t.intent && t.intent !== "unknown" ? " | " + t.intent.toUpperCase() : "") +
+        (t.threat_confidence ? " | " + Math.round(t.threat_confidence * 100) + "%" : "") +
         (t.is_stealth_candidate ? " | STEALTH" : "") +
         (t.is_hypersonic_candidate ? " | HYPERSONIC" : "");
 

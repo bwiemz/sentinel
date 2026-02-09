@@ -1,10 +1,13 @@
-"""SENTINEL full-feature demo: all sensors + environment + EW.
+"""SENTINEL full-feature demo: all sensors + environment + EW + geo + intent.
 
 Runs real simulators (multi-freq radar, thermal, quantum illumination) with:
   - Mixed threat scenario: stealth, hypersonic, conventional aircraft
   - Electronic warfare: noise jammer, chaff cloud, expendable decoy
   - Environment: light rain, atmospheric propagation
   - ECCM: QI quantum jamming resistance
+  - WGS84 geodetic coordinates (Phase 16)
+  - Batch cost-matrix ops (Phase 17 — transparent)
+  - Threat classification AI + intent estimation (Phase 18)
 
 Feeds live data into the web dashboard + prints console summary.
 
@@ -77,6 +80,7 @@ from sentinel.sensors.thermal_sim import (
 )
 from sentinel.tracking.radar_track_manager import RadarTrackManager
 from sentinel.tracking.thermal_track_manager import ThermalTrackManager
+from sentinel.utils.geo_context import GeoContext
 
 from omegaconf import OmegaConf
 
@@ -245,12 +249,16 @@ BOLD = "\033[1m"
 DIM = "\033[2m"
 
 
-def _print_header():
+def _print_header(geo_ctx: GeoContext | None = None):
     print("\033[2J\033[H", end="")  # Clear screen
     print(f"{BOLD}{'=' * 76}")
-    print(f"  SENTINEL  Full-Feature Demo — All Sensors + EW + Environment")
+    print(f"  SENTINEL  Full-Feature Demo — Phases 12-18")
     print(f"{'=' * 76}{RESET}")
     print(f"  Web dashboard: {BOLD}http://localhost:{PORT}{RESET}")
+    if geo_ctx:
+        print(f"  {DIM}Geo ref: {geo_ctx.name}  "
+              f"({geo_ctx.lat0_deg:.4f}N, {geo_ctx.lon0_deg:.4f}E, "
+              f"{geo_ctx.alt0_m:.0f}m MSL){RESET}")
     print(f"  Press Ctrl+C to stop\n")
 
 
@@ -261,8 +269,8 @@ def _print_step(step: int, elapsed: float,
                 env: EnvironmentModel,
                 clock: Clock | None = None):
     """Print a compact console summary of the current step."""
-    # Move cursor to line 8 (below header)
-    print(f"\033[8;0H\033[J", end="")
+    # Move cursor to line 9 (below header + geo line)
+    print(f"\033[9;0H\033[J", end="")
 
     ew_dets = sum(1 for d in mf_dets if d.is_ew_generated)
     real_dets = len(mf_dets) - ew_dets
@@ -301,7 +309,7 @@ def _print_step(step: int, elapsed: float,
           f"  ({stealth_corr} stealth, {chaff_corr} chaff)")
     print()
 
-    # Fused tracks with threat classification
+    # Fused tracks with threat classification + intent (Phase 18)
     print(f"  {BOLD}Fused tracks ({len(fused)}):{RESET}")
     if not fused:
         print(f"    {DIM}(none yet — waiting for track confirmation){RESET}")
@@ -333,11 +341,29 @@ def _print_step(step: int, elapsed: float,
         az = f"{ft.azimuth_deg:.1f}deg" if ft.azimuth_deg is not None else "---"
         temp = f" {ft.temperature_k:.0f}K" if ft.temperature_k else ""
 
+        # Intent (Phase 18)
+        intent_str = ""
+        if ft.intent and ft.intent != "unknown":
+            intent_str = f"  intent={ft.intent.upper()}"
+
+        # Threat method + confidence (Phase 18)
+        method_str = f"  ({ft.threat_method}" if ft.threat_method else ""
+        if method_str and ft.threat_confidence > 0:
+            method_str += f" {ft.threat_confidence:.0%}"
+        if method_str:
+            method_str += ")"
+
         print(f"    {color}{ft.threat_level:>8s}{RESET}  "
               f"[{sensor_str:>5s}]  "
               f"r={rng:>8s}  az={az:>8s}{temp}"
               f"  q={ft.fusion_quality:.2f}"
+              f"{intent_str}{method_str}"
               f"{flag_str}")
+
+        # Geodetic position (Phase 16)
+        geo = ft.to_dict().get("position_geo")
+        if geo:
+            print(f"             {DIM}geo: {geo['lat']:.5f}N  {geo['lon']:.5f}E  {geo['alt']:.0f}m{RESET}")
     print()
 
     # Weather
@@ -362,17 +388,21 @@ def _snapshot_from_state(
 ) -> "StateSnapshot":
     from sentinel.ui.web.state_buffer import StateSnapshot
 
-    # Serialize radar tracks
+    # Serialize radar tracks (with geodetic coords if available)
     radar_list = []
     for rt in radar_mgr.active_tracks:
-        radar_list.append({
+        entry = {
             "track_id": rt.track_id,
             "state": rt.state.value if hasattr(rt.state, 'value') else str(rt.state),
             "range_m": float(rt.range_m),
             "azimuth_deg": float(rt.azimuth_deg),
             "velocity_mps": float(np.linalg.norm(rt.velocity)) if rt.velocity is not None else 0.0,
             "score": float(rt.score),
-        })
+        }
+        geo = getattr(rt, "position_geo", None)
+        if geo is not None:
+            entry["position_geo"] = {"lat": float(geo[0]), "lon": float(geo[1]), "alt": float(geo[2])}
+        radar_list.append(entry)
 
     # Serialize thermal tracks
     thermal_list = []
@@ -464,11 +494,19 @@ def main() -> None:
     except ImportError:
         has_web = False
 
+    # Geo reference: Edwards AFB, California (Phase 16)
+    geo_ctx = GeoContext(
+        lat0_deg=34.9054,
+        lon0_deg=-117.8839,
+        alt0_m=702.0,
+        name="Edwards AFB",
+    )
+
     # Build environment + targets (deploy_time aligned with clock)
     env = _build_environment(deploy_time=clock.now())
     radar_targets, thermal_targets = _build_targets()
 
-    # Create simulators (all share the same clock)
+    # Create simulators (all share the same clock + geo context)
     mf_sim = MultiFreqRadarSimulator(
         MultiFreqRadarConfig(
             bands=[RadarBand.VHF, RadarBand.UHF, RadarBand.L_BAND, RadarBand.S_BAND, RadarBand.X_BAND],
@@ -481,6 +519,7 @@ def main() -> None:
         ),
         seed=42,
         clock=clock,
+        geo_context=geo_ctx,
     )
     th_sim = ThermalSimulator(
         ThermalSimConfig(
@@ -493,6 +532,7 @@ def main() -> None:
         ),
         seed=43,
         clock=clock,
+        geo_context=geo_ctx,
     )
     qi_sim = QuantumRadarSimulator(
         QuantumRadarConfig(
@@ -505,14 +545,15 @@ def main() -> None:
         ),
         seed=44,
         clock=clock,
+        geo_context=geo_ctx,
     )
 
-    # Create track managers
-    radar_mgr = RadarTrackManager(_radar_cfg())
-    thermal_mgr = ThermalTrackManager(_thermal_cfg())
-    quantum_mgr = RadarTrackManager(_radar_cfg())
+    # Create track managers (with geo context for geodetic output)
+    radar_mgr = RadarTrackManager(_radar_cfg(), geo_context=geo_ctx)
+    thermal_mgr = ThermalTrackManager(_thermal_cfg(), geo_context=geo_ctx)
+    quantum_mgr = RadarTrackManager(_radar_cfg(), geo_context=geo_ctx)
 
-    # Correlator + Fusion
+    # Correlator + Fusion (Phase 18: intent estimation enabled)
     correlator = MultiFreqCorrelator(
         range_gate_m=200.0,
         azimuth_gate_deg=5.0,
@@ -521,6 +562,7 @@ def main() -> None:
     fusion = MultiSensorFusion(
         azimuth_gate_deg=10.0,
         thermal_azimuth_gate_deg=8.0,
+        intent_estimation_enabled=True,
     )
 
     # Web dashboard (optional)
@@ -540,7 +582,7 @@ def main() -> None:
     th_sim.connect()
     qi_sim.connect()
 
-    _print_header()
+    _print_header(geo_ctx=geo_ctx)
     if not has_web:
         print(f"  {DIM}(Web dashboard unavailable — install with: pip install -e '.[web]'){RESET}\n")
     if use_sim_clock:

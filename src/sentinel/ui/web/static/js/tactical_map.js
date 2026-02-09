@@ -97,7 +97,7 @@ window.TacticalMap = (function () {
     ctx.fill();
   }
 
-  function plotTrack(cx, cy, radius, range_m, azimuth_deg, type, state, threat) {
+  function plotTrack(cx, cy, radius, range_m, azimuth_deg, type, state, threat, label) {
     if (range_m == null || azimuth_deg == null) return;
     const range_km = range_m / 1000;
     if (range_km > maxRange) return;
@@ -137,6 +137,15 @@ window.TacticalMap = (function () {
       // Camera: small square
       ctx.strokeRect(x - 3, y - 3, 6, 6);
     }
+
+    // Draw label (intent / geo) for fused tracks
+    if (label) {
+      ctx.font = "8px Consolas, monospace";
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.8;
+      ctx.fillText(label, x + 7, y + 3);
+      ctx.globalAlpha = 1.0;
+    }
   }
 
   // ---------------------------------------------------------------
@@ -167,7 +176,7 @@ window.TacticalMap = (function () {
         range_m = lerp(prev.range_m, tr.range_m, t);
         az = lerpAngle(prev.azimuth_deg, tr.azimuth_deg, t);
       }
-      plotTrack(cx, cy, radius, range_m, az, "radar", tr.state, null);
+      plotTrack(cx, cy, radius, range_m, az, "radar", tr.state, null, null);
     });
 
     // Thermal tracks — interpolated azimuth
@@ -179,10 +188,10 @@ window.TacticalMap = (function () {
       if (prev && prev.azimuth_deg != null && az != null) {
         az = lerpAngle(prev.azimuth_deg, tr.azimuth_deg, t);
       }
-      plotTrack(cx, cy, radius, range_m, az, "thermal", tr.state, null);
+      plotTrack(cx, cy, radius, range_m, az, "thermal", tr.state, null, null);
     });
 
-    // Enhanced fused tracks — interpolated
+    // Enhanced fused tracks — interpolated, with intent + geo labels
     (tracks.enhanced_fused || []).forEach(function (tr) {
       var key = tr.fused_id;
       var prev = prevFused[key];
@@ -192,12 +201,19 @@ window.TacticalMap = (function () {
         range_m = lerp(prev.range_m, tr.range_m, t);
         az = lerpAngle(prev.azimuth_deg, tr.azimuth_deg, t);
       }
-      plotTrack(cx, cy, radius, range_m, az, "enhanced_fused", null, tr.threat_level);
+      // Build label: intent + geo coords
+      var parts = [];
+      if (tr.intent && tr.intent !== "unknown") parts.push(tr.intent.toUpperCase());
+      if (tr.position_geo) {
+        parts.push(tr.position_geo.lat.toFixed(3) + "N " + tr.position_geo.lon.toFixed(3) + "E");
+      }
+      var label = parts.length > 0 ? parts.join(" | ") : null;
+      plotTrack(cx, cy, radius, range_m, az, "enhanced_fused", null, tr.threat_level, label);
     });
 
     // Plain fused tracks
     (tracks.fused || []).forEach(function (tr) {
-      plotTrack(cx, cy, radius, tr.range_m, tr.azimuth_deg, "fused", null, null);
+      plotTrack(cx, cy, radius, tr.range_m, tr.azimuth_deg, "fused", null, null, null);
     });
   }
 

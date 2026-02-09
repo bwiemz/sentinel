@@ -37,6 +37,7 @@ window.TrackTable = (function () {
         velocity: t.velocity ? Math.sqrt(t.velocity[0] ** 2 + t.velocity[1] ** 2).toFixed(1) : "",
         score: t.score != null ? t.score.toFixed(2) : "",
         threat: "",
+        intent: "",
         _state: t.state,
       });
     });
@@ -51,6 +52,7 @@ window.TrackTable = (function () {
         velocity: t.velocity_mps != null ? (typeof t.velocity_mps === "number" ? t.velocity_mps.toFixed(0) : Math.sqrt(t.velocity_mps[0] ** 2 + t.velocity_mps[1] ** 2).toFixed(0)) : "",
         score: t.score != null ? t.score.toFixed(2) : "",
         threat: "",
+        intent: "",
         _state: t.state,
       });
     });
@@ -65,6 +67,7 @@ window.TrackTable = (function () {
         velocity: "",
         score: t.score != null ? t.score.toFixed(2) : "",
         threat: "",
+        intent: "",
         _state: t.state,
       });
     });
@@ -79,6 +82,7 @@ window.TrackTable = (function () {
         velocity: t.velocity_mps != null ? t.velocity_mps.toFixed(0) : "",
         score: t.fusion_quality != null ? t.fusion_quality.toFixed(2) : "",
         threat: t.threat_level || "",
+        intent: t.intent && t.intent !== "unknown" ? t.intent.toUpperCase() : "",
         _state: "",
       });
     });
@@ -107,8 +111,17 @@ window.TrackTable = (function () {
     return "";
   }
 
-  var COL_COUNT = 8;
-  var FIELDS = ["id", "type", "state", "range", "azimuth", "velocity", "score", "threat"];
+  function intentColor(intent) {
+    if (intent === "ATTACK") return "var(--color-critical)";
+    if (intent === "APPROACH") return "var(--color-high)";
+    if (intent === "EVASION") return "var(--color-medium)";
+    if (intent === "PATROL") return "var(--color-radar)";
+    if (intent === "TRANSIT") return "var(--color-text-dim)";
+    return "";
+  }
+
+  var COL_COUNT = 9;
+  var FIELDS = ["id", "type", "state", "range", "azimuth", "velocity", "score", "threat", "intent"];
 
   function ensureRow(index) {
     if (index < tbody.children.length) return tbody.children[index];
@@ -134,12 +147,18 @@ window.TrackTable = (function () {
       for (var j = 0; j < FIELDS.length; j++) {
         var val = r[FIELDS[j]];
         var text = (val != null && val !== "") ? String(val) : "-";
-        if (j === FIELDS.length - 1) {
+        if (FIELDS[j] === "threat") {
           // threat column — also set color
           text = val || "";
           if (cells[j].textContent !== text) cells[j].textContent = text;
           var tc = threatColor(val);
           if (cells[j].style.color !== tc) cells[j].style.color = tc;
+        } else if (FIELDS[j] === "intent") {
+          // intent column — color by intent type
+          text = val || "";
+          if (cells[j].textContent !== text) cells[j].textContent = text;
+          var ic = intentColor(val);
+          if (cells[j].style.color !== ic) cells[j].style.color = ic;
         } else {
           if (cells[j].textContent !== text) cells[j].textContent = text;
         }
