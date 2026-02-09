@@ -272,6 +272,7 @@ P_total = 1 - product(1 - P_i)
 | 12 | Terrain & environment: terrain masking, atmospheric propagation, weather effects, clutter models | `c8ba6fd` |
 | 13 | Electronic warfare: noise/deceptive jamming, chaff, decoys, ECCM, QI jamming resistance | `3f4e07a` |
 | -- | Web dashboard performance: fixed layout, incremental DOM, rAF batching, full EW demo | `40f59bb` |
+| -- | 30fps tactical display: decoupled render loop, position interpolation, MIL-STD-1472 throttling | `92273b9` |
 
 ## Dependencies
 
