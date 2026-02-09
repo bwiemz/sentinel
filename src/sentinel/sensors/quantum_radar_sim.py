@@ -392,6 +392,7 @@ def quantum_radar_frame_to_detections(frame: SensorFrame) -> list[Detection]:
                 entanglement_fidelity=d.get("entanglement_fidelity"),
                 n_signal_photons=d.get("n_signal_photons"),
                 receiver_type=d.get("receiver_type"),
+                target_id=d.get("target_id"),
             )
         )
     return detections

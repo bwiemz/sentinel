@@ -302,6 +302,31 @@ class ThreatClassificationConfig(BaseModel):
     stealth_rcs_variation_db: float = Field(default=15.0, gt=0)
 
 
+class IFFConfigSchema(BaseModel):
+    enabled: bool = False
+    max_interrogation_range_m: float = Field(default=400_000.0, gt=0)
+    interrogation_rate_hz: float = Field(default=1.0, gt=0)
+    modes: list[str] = Field(default_factory=lambda: ["mode_3a", "mode_c"])
+    require_mode_4: bool = False
+    require_mode_5: bool = False
+    spoof_detection_enabled: bool = True
+    spoof_detection_threshold: float = Field(default=0.7, ge=0, le=1)
+    no_response_hostile_threshold: int = Field(default=3, gt=0)
+    controlled_airspace: bool = False
+    friendly_codes: list[str] = Field(default_factory=list)
+
+
+class ROEConfigSchema(BaseModel):
+    enabled: bool = False
+    default_posture: str = "weapons_hold"
+    friendly_override: bool = True
+    hostile_attack_posture: str = "weapons_free"
+    hostile_no_attack_posture: str = "weapons_tight"
+    unknown_controlled_posture: str = "weapons_tight"
+    spoof_posture: str = "weapons_free"
+    critical_threat_posture: str = "weapons_free"
+
+
 class FusionConfig(BaseModel):
     enabled: bool = True
     camera_hfov_deg: float = Field(default=60.0, gt=0)
@@ -436,6 +461,8 @@ class SentinelRootConfig(BaseModel):
     tracking: TrackingConfig = Field(default_factory=TrackingConfig)
     fusion: FusionConfig = Field(default_factory=FusionConfig)
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
+    iff: IFFConfigSchema = Field(default_factory=IFFConfigSchema)
+    roe: ROEConfigSchema = Field(default_factory=ROEConfigSchema)
     ui: UIConfig = Field(default_factory=UIConfig)
     geo_reference: GeoReferenceConfig = Field(default_factory=GeoReferenceConfig)
 

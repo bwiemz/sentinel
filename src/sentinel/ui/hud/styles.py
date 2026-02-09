@@ -38,6 +38,19 @@ class HUDStyles:
     color_threat_high: Color = (0, 80, 255)  # Orange-red
     color_threat_medium: Color = (0, 200, 255)  # Yellow
     color_threat_low: Color = (0, 200, 0)  # Green
+    # IFF identification colors (BGR)
+    color_iff_friendly: Color = (0, 255, 0)  # Green
+    color_iff_assumed_friendly: Color = (0, 180, 0)  # Dim green
+    color_iff_hostile: Color = (0, 0, 255)  # Red
+    color_iff_assumed_hostile: Color = (0, 80, 255)  # Orange-red
+    color_iff_unknown: Color = (0, 255, 255)  # Yellow
+    color_iff_pending: Color = (180, 180, 180)  # Grey
+    color_iff_spoof: Color = (200, 0, 200)  # Magenta
+    # Engagement authorization colors (BGR)
+    color_auth_weapons_free: Color = (0, 0, 255)  # Red
+    color_auth_weapons_tight: Color = (0, 165, 255)  # Orange
+    color_auth_weapons_hold: Color = (0, 255, 255)  # Yellow
+    color_auth_hold_fire: Color = (0, 255, 0)  # Green
 
     # Font
     font_face: int = cv2.FONT_HERSHEY_SIMPLEX
@@ -98,3 +111,24 @@ class HUDStyles:
             "MEDIUM": self.color_threat_medium,
             "LOW": self.color_threat_low,
         }.get(threat_level, self.color_text)
+
+    def color_for_iff(self, iff_code: str) -> Color:
+        """Get the color associated with an IFF identification code."""
+        return {
+            "friendly": self.color_iff_friendly,
+            "assumed_friendly": self.color_iff_assumed_friendly,
+            "hostile": self.color_iff_hostile,
+            "assumed_hostile": self.color_iff_assumed_hostile,
+            "unknown": self.color_iff_unknown,
+            "pending": self.color_iff_pending,
+            "spoof_suspect": self.color_iff_spoof,
+        }.get(iff_code, self.color_iff_unknown)
+
+    def color_for_engagement(self, auth: str) -> Color:
+        """Get the color associated with an engagement authorization."""
+        return {
+            "weapons_free": self.color_auth_weapons_free,
+            "weapons_tight": self.color_auth_weapons_tight,
+            "weapons_hold": self.color_auth_weapons_hold,
+            "hold_fire": self.color_auth_hold_fire,
+        }.get(auth, self.color_text)

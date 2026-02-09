@@ -44,6 +44,11 @@ FEATURE_NAMES: list[str] = [
     "track_age",
     "filter_health_score",
     "fusion_quality",
+    # IFF (4)
+    "iff_is_friendly",
+    "iff_is_hostile",
+    "iff_has_crypto_auth",
+    "iff_spoof_suspect",
 ]
 
 FEATURE_COUNT: int = len(FEATURE_NAMES)
@@ -188,6 +193,14 @@ class FeatureExtractor:
         features[25] = float(max(ages)) if ages else 0.0
         features[26] = max(health_scores) if health_scores else 1.0
         features[27] = eft.fusion_quality
+
+        # --- IFF features (28-31) ---
+        iff_id = getattr(eft, "iff_identification", "unknown")
+        features[28] = 1.0 if iff_id in ("friendly", "assumed_friendly") else 0.0
+        features[29] = 1.0 if iff_id in ("hostile", "assumed_hostile") else 0.0
+        iff_auth = getattr(eft, "iff_last_auth_mode", None)
+        features[30] = 1.0 if iff_auth in ("mode_4", "mode_5") else 0.0
+        features[31] = 1.0 if getattr(eft, "iff_spoof_suspect", False) else 0.0
 
         return features
 

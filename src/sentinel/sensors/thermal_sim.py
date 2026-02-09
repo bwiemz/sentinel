@@ -34,6 +34,7 @@ class ThermalTarget:
     target_type: TargetType = TargetType.CONVENTIONAL
     mach: float = 0.0  # 0 = compute from velocity
     class_name: str = "unknown"
+    iff_transponder: "IFFTransponder | None" = None  # For cross-sensor correlation
     _signature: ThermalSignature | None = field(default=None, repr=False)
 
     def __post_init__(self):
@@ -101,6 +102,9 @@ class ThermalSimConfig:
                 position = xy
             else:
                 position = np.array(t.get("position", [0, 0]), dtype=float)
+            from sentinel.sensors.iff import IFFTransponder
+            iff_cfg = t.get("iff_transponder", None)
+            iff_tp = IFFTransponder.from_omegaconf(iff_cfg) if iff_cfg else None
             targets.append(
                 ThermalTarget(
                     target_id=t.get("id", "TGT"),
@@ -109,6 +113,7 @@ class ThermalSimConfig:
                     target_type=TargetType(tt_str),
                     mach=t.get("mach", 0.0),
                     class_name=t.get("class_name", "unknown"),
+                    iff_transponder=iff_tp,
                 )
             )
 

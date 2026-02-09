@@ -63,6 +63,39 @@ class IntentType(enum.Enum):
     UNKNOWN = "unknown"
 
 
+class IFFCode(enum.Enum):
+    """IFF identification result."""
+
+    FRIENDLY = "friendly"
+    HOSTILE = "hostile"
+    UNKNOWN = "unknown"
+    PENDING = "pending"
+    ASSUMED_FRIENDLY = "assumed_friendly"
+    ASSUMED_HOSTILE = "assumed_hostile"
+    SPOOF_SUSPECT = "spoof_suspect"
+
+
+class IFFMode(enum.Enum):
+    """IFF interrogation modes."""
+
+    MODE_1 = "mode_1"  # Military mission code (2-digit octal)
+    MODE_2 = "mode_2"  # Military unit code (4-digit octal)
+    MODE_3A = "mode_3a"  # Civil/military squawk (4-digit octal)
+    MODE_C = "mode_c"  # Altitude reporting (100ft increments)
+    MODE_S = "mode_s"  # 24-bit ICAO address + selective interrogation
+    MODE_4 = "mode_4"  # Cryptographic military (challenge-response)
+    MODE_5 = "mode_5"  # Enhanced crypto military (AES-128)
+
+
+class EngagementAuth(enum.Enum):
+    """Rules of Engagement authorization status."""
+
+    WEAPONS_FREE = "weapons_free"
+    WEAPONS_TIGHT = "weapons_tight"
+    WEAPONS_HOLD = "weapons_hold"
+    HOLD_FIRE = "hold_fire"
+
+
 class TrackState(enum.Enum):
     TENTATIVE = "tentative"
     CONFIRMED = "confirmed"
@@ -107,6 +140,9 @@ class Detection:
     # Electronic warfare
     is_ew_generated: bool = False  # True for chaff/decoy/deceptive detections
     ew_source_id: str | None = None  # Identifies the EW source
+
+    # Source target ID (propagated from simulator for IFF matching)
+    target_id: str | None = None
 
     # Shared / fused
     position_3d: np.ndarray | None = None  # [x, y, z] world frame

@@ -318,6 +318,29 @@ sentinel:
       radar_gain_db: 30.0
       radar_bandwidth_hz: 1000000.0
 
+  iff:
+    enabled: false                     # Enable IFF interrogation system
+    max_interrogation_range_m: 400000.0  # Max IFF interrogation range (~216 NM)
+    interrogation_rate_hz: 1.0         # IFF queries per second
+    modes: ["mode_3a", "mode_c"]       # IFF modes to interrogate
+    require_mode_4: false              # Require Mode 4 crypto for FRIENDLY
+    require_mode_5: false              # Require Mode 5 crypto for FRIENDLY
+    spoof_detection_enabled: true      # Cross-check crypto + kinematics
+    spoof_detection_threshold: 0.7     # Spoof score above this = SPOOF_SUSPECT
+    no_response_hostile_threshold: 3   # Consecutive no-responses → ASSUMED_HOSTILE
+    controlled_airspace: false         # Unidentified in controlled → WEAPONS_TIGHT
+    friendly_codes: []                 # Known-friendly Mode 3/A squawk codes
+
+  roe:
+    enabled: false                     # Enable Rules of Engagement engine
+    default_posture: "weapons_hold"    # Default engagement authorization
+    friendly_override: true            # FRIENDLY IFF always → HOLD_FIRE
+    hostile_attack_posture: "weapons_free"
+    hostile_no_attack_posture: "weapons_tight"
+    unknown_controlled_posture: "weapons_tight"
+    spoof_posture: "weapons_free"
+    critical_threat_posture: "weapons_free"
+
   geo_reference:
     enabled: false
     lat: 0.0

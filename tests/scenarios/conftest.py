@@ -15,6 +15,8 @@ from sentinel.core.types import (
     TargetType,
     TrackState,
 )
+from sentinel.sensors.iff import IFFConfig, IFFInterrogator, IFFTransponder
+from sentinel.classification.roe import ROEConfig, ROEEngine
 from sentinel.fusion.multi_sensor_fusion import (
     EnhancedFusedTrack,
     MultiSensorFusion,
@@ -65,6 +67,7 @@ class ScenarioTarget:
     expected_stealth: bool = False
     expected_hypersonic: bool = False
     position_geo: tuple[float, float, float] | None = None  # (lat, lon, alt)
+    iff_transponder: IFFTransponder | None = None
 
 
 @dataclass
@@ -151,6 +154,8 @@ class ScenarioRunner:
         clock: Clock | None = None,
         step_dt: float = 0.1,
         geo_context: GeoContext | None = None,
+        iff_config: IFFConfig | None = None,
+        roe_config: ROEConfig | None = None,
     ):
         self.targets = targets
         self.geo_context = geo_context
@@ -168,6 +173,8 @@ class ScenarioRunner:
         self.environment = environment
         self.clock = clock
         self.step_dt = step_dt
+        self.iff_config = iff_config
+        self.roe_config = roe_config
 
     # ---------------------------------------------------------------
     # Geodetic resolution
@@ -261,12 +268,38 @@ class ScenarioRunner:
         last_mf_dets = mf_det_log[-1] if mf_det_log else []
         correlated, _ = correlator.correlate(last_mf_dets)
 
+        # IFF interrogation (if configured)
+        iff_interrogator = None
+        iff_results = None
+        roe_engine = None
+        if self.iff_config and self.iff_config.enabled:
+            iff_interrogator = IFFInterrogator(self.iff_config)
+            # Build target list: (target_id, transponder_or_none, range_m)
+            target_list = []
+            for t in self.targets:
+                range_m = float(np.linalg.norm(t.position))
+                target_list.append((t.target_id, t.iff_transponder, range_m))
+            # Run interrogation across all steps to accumulate confidence
+            for _ in range(self.n_steps):
+                t_now = clock.now()
+                iff_interrogator.interrogate_all(target_list, t_now)
+            iff_results = {
+                tid: iff_interrogator.get_result(tid)
+                for tid, _, _ in target_list
+                if iff_interrogator.get_result(tid) is not None
+            }
+        if self.roe_config and self.roe_config.enabled:
+            roe_engine = ROEEngine(self.roe_config)
+
         # Multi-sensor fusion
         fusion = MultiSensorFusion(
             camera_hfov_deg=60.0,
             image_width_px=1280,
             azimuth_gate_deg=10.0,
             thermal_azimuth_gate_deg=5.0,
+            iff_interrogator=iff_interrogator,
+            roe_engine=roe_engine,
+            controlled_airspace=self.iff_config.controlled_airspace if self.iff_config else False,
         )
         fused = fusion.fuse(
             camera_tracks=[],
@@ -274,6 +307,7 @@ class ScenarioRunner:
             thermal_tracks=thermal_mgr.confirmed_tracks if thermal_mgr else [],
             correlated_detections=correlated or None,
             quantum_radar_tracks=quantum_mgr.confirmed_tracks if quantum_mgr else [],
+            iff_results=iff_results,
         )
 
         return ScenarioResult(
@@ -304,6 +338,7 @@ class ScenarioRunner:
                 rcs_dbsm=t.rcs_dbsm,
                 target_type=t.target_type,
                 mach=t.mach,
+                iff_transponder=t.iff_transponder,
             )
             for t in self.targets
         ]
@@ -316,6 +351,7 @@ class ScenarioRunner:
                 velocity=t.velocity.copy(),
                 target_type=t.target_type,
                 mach=t.mach,
+                iff_transponder=t.iff_transponder,
             )
             for t in self.targets
         ]

@@ -120,8 +120,8 @@ class TestFeatureNames:
     def test_feature_count_matches_names(self):
         assert len(FEATURE_NAMES) == FEATURE_COUNT
 
-    def test_feature_count_is_28(self):
-        assert FEATURE_COUNT == 28
+    def test_feature_count_is_32(self):
+        assert FEATURE_COUNT == 32
 
     def test_no_duplicate_names(self):
         assert len(set(FEATURE_NAMES)) == len(FEATURE_NAMES)

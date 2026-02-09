@@ -13,6 +13,7 @@ import numpy as np
 
 from sentinel.core.clock import Clock, SystemClock
 from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
+from sentinel.sensors.iff import IFFTransponder
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
 from sentinel.sensors.environment import EnvironmentModel, total_propagation_loss_db
@@ -45,6 +46,7 @@ class RadarTarget:
     velocity: np.ndarray
     rcs_dbsm: float = 10.0
     class_name: str = "unknown"
+    iff_transponder: IFFTransponder | None = None
 
     def position_at(self, t: float) -> np.ndarray:
         """Ground-truth position at time t seconds from start."""
@@ -86,6 +88,8 @@ class RadarSimConfig:
                 position = xy
             else:
                 position = np.array(t.get("position", [0, 0]), dtype=float)
+            iff_cfg = t.get("iff_transponder", None)
+            iff_tp = IFFTransponder.from_omegaconf(iff_cfg) if iff_cfg else None
             targets.append(
                 RadarTarget(
                     target_id=t.get("id", "TGT"),
@@ -93,6 +97,7 @@ class RadarSimConfig:
                     velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
                     rcs_dbsm=t.get("rcs_dbsm", 10.0),
                     class_name=t.get("class_name", "unknown"),
+                    iff_transponder=iff_tp,
                 )
             )
         return cls(
@@ -342,6 +347,7 @@ def radar_frame_to_detections(frame: SensorFrame) -> list[Detection]:
                 velocity_mps=d["velocity_mps"],
                 rcs_dbsm=d["rcs_dbsm"],
                 position_3d=np.array([pos[0], pos[1], 0.0]),
+                target_id=d.get("target_id"),
             )
         )
     return detections

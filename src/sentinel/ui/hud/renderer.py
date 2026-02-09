@@ -119,6 +119,9 @@ class HUDRenderer:
                     )
                 # Threat indicators
                 self._elements.draw_threat_indicator(display, eft, w)
+                # IFF / ROE badges
+                self._elements.draw_iff_badge(display, eft, w)
+                self._elements.draw_engagement_badge(display, eft, w)
                 if eft.is_stealth_candidate:
                     has_stealth = True
                 if eft.is_hypersonic_candidate or (eft.temperature_k is not None and eft.temperature_k > 1500):

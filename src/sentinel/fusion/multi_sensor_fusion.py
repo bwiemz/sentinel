@@ -51,6 +51,15 @@ class EnhancedFusedTrack(FusedTrack):
     threat_method: str = "rule_based"
     intent: str = "unknown"
     intent_confidence: float = 0.0
+    # IFF identification
+    iff_identification: str = "unknown"
+    iff_confidence: float = 0.0
+    iff_mode_3a_code: str | None = None
+    iff_mode_s_address: str | None = None
+    iff_last_auth_mode: str | None = None
+    iff_spoof_suspect: bool = False
+    # Rules of Engagement
+    engagement_auth: str = "weapons_hold"
 
     @property
     def sensor_count(self) -> int:
@@ -84,6 +93,11 @@ class EnhancedFusedTrack(FusedTrack):
                 "intent_confidence": self.intent_confidence,
                 "radar_bands": self.radar_bands_detected,
                 "thermal_bands": self.thermal_bands_detected,
+                "iff_identification": self.iff_identification,
+                "iff_confidence": self.iff_confidence,
+                "iff_mode_3a_code": self.iff_mode_3a_code,
+                "iff_spoof_suspect": self.iff_spoof_suspect,
+                "engagement_auth": self.engagement_auth,
             }
         )
         return d
@@ -120,6 +134,9 @@ class MultiSensorFusion:
         threat_model_path: str | None = None,
         threat_confidence_threshold: float = 0.6,
         intent_estimation_enabled: bool = False,
+        iff_interrogator: "IFFInterrogator | None" = None,
+        roe_engine: "ROEEngine | None" = None,
+        controlled_airspace: bool = False,
     ):
         self._base_fusion = TrackFusion(
             camera_hfov_deg=camera_hfov_deg,
@@ -158,6 +175,10 @@ class MultiSensorFusion:
             except Exception:
                 logger.warning("Intent estimator unavailable")
 
+        self._iff_interrogator = iff_interrogator
+        self._roe_engine = roe_engine
+        self._controlled_airspace = controlled_airspace
+
     def fuse(
         self,
         camera_tracks: list[Track],
@@ -165,6 +186,7 @@ class MultiSensorFusion:
         thermal_tracks: list[ThermalTrack] | None = None,
         correlated_detections: list[CorrelatedDetection] | None = None,
         quantum_radar_tracks: list[RadarTrack] | None = None,
+        iff_results: dict[str, "IFFResult"] | None = None,
     ) -> list[EnhancedFusedTrack]:
         """Full multi-sensor fusion."""
         if not camera_tracks and not radar_tracks and not thermal_tracks and not quantum_radar_tracks:
@@ -222,6 +244,19 @@ class MultiSensorFusion:
                 intent_result = self._intent_estimator.estimate(eft)
                 eft.intent = intent_result.intent.value
                 eft.intent_confidence = intent_result.confidence
+
+            # Apply IFF identification
+            self._apply_iff(eft, iff_results)
+
+            # Apply ROE
+            if self._roe_engine is not None:
+                eft.engagement_auth = self._roe_engine.evaluate(
+                    iff_identification=eft.iff_identification,
+                    threat_level=eft.threat_level,
+                    intent=eft.intent,
+                    controlled_airspace=self._controlled_airspace,
+                ).value
+
             eft.fusion_quality = self._compute_fusion_quality(eft)
 
         # Filter by minimum fusion quality
@@ -380,6 +415,63 @@ class MultiSensorFusion:
                 eft.is_stealth_candidate = best_cd.is_stealth_candidate
                 eft.is_hypersonic_candidate = best_cd.is_hypersonic_candidate
                 eft.is_chaff_candidate = best_cd.is_chaff_candidate
+
+    def _apply_iff(
+        self,
+        eft: EnhancedFusedTrack,
+        iff_results: dict | None,
+    ) -> None:
+        """Apply IFF identification to a fused track."""
+        if iff_results is None:
+            return
+
+        # Match IFF result to fused track via radar track's last_detection target_id
+        target_id = None
+        if eft.radar_track is not None and eft.radar_track.last_detection is not None:
+            det = eft.radar_track.last_detection
+            # Target ID may be stored on the detection (simulator tags it)
+            target_id = getattr(det, "target_id", None)
+        if eft.quantum_radar_track is not None and target_id is None:
+            det = eft.quantum_radar_track.last_detection
+            if det is not None:
+                target_id = getattr(det, "target_id", None)
+
+        if target_id is None:
+            return
+
+        result = iff_results.get(target_id)
+        if result is None:
+            return
+
+        eft.iff_identification = result.identification.value
+        eft.iff_confidence = result.confidence
+        eft.iff_mode_3a_code = result.mode_3a_code
+        eft.iff_mode_s_address = result.mode_s_address
+        eft.iff_last_auth_mode = (
+            result.last_authenticated_mode.value
+            if result.last_authenticated_mode is not None
+            else None
+        )
+        eft.iff_spoof_suspect = result.spoof_indicators > 0
+
+        # IFF influences threat classification
+        from sentinel.core.types import IFFCode
+
+        iff_code = result.identification
+        if iff_code in (IFFCode.FRIENDLY, IFFCode.ASSUMED_FRIENDLY):
+            # Friendly targets: cap threat at MEDIUM
+            if eft.threat_level in (THREAT_CRITICAL, THREAT_HIGH):
+                eft.threat_level = THREAT_MEDIUM
+        elif iff_code == IFFCode.SPOOF_SUSPECT:
+            # Spoofed IFF: boost to at least HIGH
+            if eft.threat_level in (THREAT_LOW, THREAT_MEDIUM):
+                eft.threat_level = THREAT_HIGH
+        elif iff_code == IFFCode.ASSUMED_HOSTILE:
+            # No IFF confirmed hostile: boost by one level
+            if eft.threat_level == THREAT_LOW:
+                eft.threat_level = THREAT_MEDIUM
+            elif eft.threat_level == THREAT_MEDIUM:
+                eft.threat_level = THREAT_HIGH
 
     def _classify_threat(self, eft: EnhancedFusedTrack) -> str:
         """Classify threat level based on sensor signatures."""

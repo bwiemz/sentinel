@@ -498,6 +498,98 @@ class HUDElements:
             cv2.LINE_AA,
         )
 
+    def draw_iff_badge(
+        self,
+        frame: np.ndarray,
+        fused_track,
+        image_width: int,
+        camera_hfov_deg: float = 60.0,
+    ) -> None:
+        """Draw IFF identification badge near the fused track position."""
+        iff_id = getattr(fused_track, "iff_identification", "unknown")
+        if iff_id == "unknown":
+            return
+
+        color = self.s.color_for_iff(iff_id)
+
+        # Short label
+        IFF_LABELS = {
+            "friendly": "FRD",
+            "assumed_friendly": "A-FRD",
+            "hostile": "HST",
+            "assumed_hostile": "A-HST",
+            "spoof_suspect": "SPOOF",
+            "pending": "PND",
+        }
+        label = "IFF:" + IFF_LABELS.get(iff_id, iff_id.upper())
+
+        # Position from camera bbox or azimuth
+        px_x, py = None, None
+        if fused_track.camera_track is not None:
+            bbox = fused_track.camera_track.predicted_bbox
+            if bbox is not None:
+                px_x = int(bbox[2]) + 4
+                py = int(bbox[1]) + 38
+        if px_x is None:
+            az = getattr(fused_track, "azimuth_deg", None)
+            if az is not None:
+                px_x = int((az / camera_hfov_deg + 0.5) * image_width)
+                px_x = max(0, min(px_x, frame.shape[1] - 1))
+                py = frame.shape[0] - 108
+            else:
+                return
+
+        (tw, th), _ = cv2.getTextSize(label, self.s.font_face, self.s.font_scale_small, 1)
+        cv2.rectangle(frame, (px_x - 1, py - th - 2), (px_x + tw + 2, py + 2), self.s.color_panel_bg, -1)
+        cv2.putText(
+            frame, label, (px_x, py),
+            self.s.font_face, self.s.font_scale_small, color, 1, cv2.LINE_AA,
+        )
+
+    def draw_engagement_badge(
+        self,
+        frame: np.ndarray,
+        fused_track,
+        image_width: int,
+        camera_hfov_deg: float = 60.0,
+    ) -> None:
+        """Draw ROE engagement authorization badge near the fused track position."""
+        auth = getattr(fused_track, "engagement_auth", "weapons_hold")
+        if auth == "weapons_hold":
+            return  # Default, don't clutter
+
+        color = self.s.color_for_engagement(auth)
+
+        AUTH_LABELS = {
+            "weapons_free": "W-FREE",
+            "weapons_tight": "W-TIGHT",
+            "hold_fire": "HOLD",
+        }
+        label = "ROE:" + AUTH_LABELS.get(auth, auth.upper())
+
+        # Position from camera bbox or azimuth
+        px_x, py = None, None
+        if fused_track.camera_track is not None:
+            bbox = fused_track.camera_track.predicted_bbox
+            if bbox is not None:
+                px_x = int(bbox[2]) + 4
+                py = int(bbox[1]) + 52
+        if px_x is None:
+            az = getattr(fused_track, "azimuth_deg", None)
+            if az is not None:
+                px_x = int((az / camera_hfov_deg + 0.5) * image_width)
+                px_x = max(0, min(px_x, frame.shape[1] - 1))
+                py = frame.shape[0] - 122
+            else:
+                return
+
+        (tw, th), _ = cv2.getTextSize(label, self.s.font_face, self.s.font_scale_small, 1)
+        cv2.rectangle(frame, (px_x - 1, py - th - 2), (px_x + tw + 2, py + 2), self.s.color_panel_bg, -1)
+        cv2.putText(
+            frame, label, (px_x, py),
+            self.s.font_face, self.s.font_scale_small, color, 1, cv2.LINE_AA,
+        )
+
     def draw_stealth_alert(self, frame: np.ndarray) -> None:
         """Draw STEALTH DETECTED alert banner."""
         h, w = frame.shape[:2]

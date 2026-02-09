@@ -20,6 +20,19 @@
   --color-high: #ff5000;
   --color-medium: #ffc800;
   --color-low: #00c800;
+  /* IFF identification */
+  --color-iff-friendly: #00ff00;
+  --color-iff-assumed-friendly: #008c00;
+  --color-iff-hostile: #ff0000;
+  --color-iff-assumed-hostile: #ff5000;
+  --color-iff-unknown: #ffff00;
+  --color-iff-pending: #888888;
+  --color-iff-spoof: #c800c8;
+  /* Engagement authorization */
+  --color-auth-weapons-free: #ff0000;
+  --color-auth-weapons-tight: #ffa500;
+  --color-auth-weapons-hold: #ffff00;
+  --color-auth-hold-fire: #00ff00;
   --font-mono: "Consolas", "Courier New", monospace;
   --glow: 0 0 6px rgba(0, 255, 0, 0.3);
 }

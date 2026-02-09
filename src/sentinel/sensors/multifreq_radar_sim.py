@@ -105,6 +105,9 @@ class MultiFreqRadarConfig:
                 position = xy
             else:
                 position = np.array(t.get("position", [0, 0]), dtype=float)
+            from sentinel.sensors.iff import IFFTransponder
+            iff_cfg = t.get("iff_transponder", None)
+            iff_tp = IFFTransponder.from_omegaconf(iff_cfg) if iff_cfg else None
             targets.append(
                 MultiFreqRadarTarget(
                     target_id=t.get("id", "TGT"),
@@ -112,6 +115,7 @@ class MultiFreqRadarConfig:
                     velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
                     rcs_dbsm=t.get("rcs_dbsm", 10.0),
                     class_name=t.get("class_name", "unknown"),
+                    iff_transponder=iff_tp,
                     target_type=TargetType(tt_str),
                     mach=t.get("mach", 0.0),
                 )
@@ -337,6 +341,7 @@ def multifreq_radar_frame_to_detections(frame: SensorFrame) -> list[Detection]:
                 rcs_dbsm=d["rcs_dbsm"],
                 radar_band=d.get("frequency_band"),
                 position_3d=np.array([pos[0], pos[1], 0.0]),
+                target_id=d.get("target_id"),
             )
         )
     return detections

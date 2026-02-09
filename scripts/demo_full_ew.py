@@ -1,4 +1,4 @@
-"""SENTINEL full-feature demo: all sensors + environment + EW + geo + intent.
+"""SENTINEL full-feature demo: all sensors + environment + EW + geo + intent + IFF.
 
 Runs real simulators (multi-freq radar, thermal, quantum illumination) with:
   - Mixed threat scenario: stealth, hypersonic, conventional aircraft
@@ -8,6 +8,7 @@ Runs real simulators (multi-freq radar, thermal, quantum illumination) with:
   - WGS84 geodetic coordinates (Phase 16)
   - Batch cost-matrix ops (Phase 17 — transparent)
   - Threat classification AI + intent estimation (Phase 18)
+  - IFF identification + Rules of Engagement (Phase 19)
 
 Feeds live data into the web dashboard + prints console summary.
 
@@ -39,11 +40,15 @@ from sentinel.core.clock import Clock, SimClock, SystemClock
 
 from sentinel.core.types import (
     Detection,
+    IFFCode,
+    IFFMode,
     RadarBand,
     SensorType,
     TargetType,
     TrackState,
 )
+from sentinel.sensors.iff import IFFConfig, IFFInterrogator, IFFTransponder
+from sentinel.classification.roe import ROEConfig, ROEEngine
 from sentinel.fusion.multi_sensor_fusion import (
     EnhancedFusedTrack,
     MultiSensorFusion,
@@ -185,6 +190,13 @@ def _build_targets() -> tuple[list[MultiFreqRadarTarget], list[ThermalTarget]]:
         rcs_dbsm=10.0,
         target_type=TargetType.CONVENTIONAL,
         mach=0.8,
+        iff_transponder=IFFTransponder(
+            enabled=True,
+            modes=[IFFMode.MODE_3A, IFFMode.MODE_C, IFFMode.MODE_4],
+            mode_3a_code="1200",
+            mode_4_valid=True,
+            reliability=1.0,
+        ),
     )
 
     radar_targets = [
@@ -199,6 +211,7 @@ def _build_targets() -> tuple[list[MultiFreqRadarTarget], list[ThermalTarget]]:
             velocity=t["velocity"].copy(),
             target_type=t["target_type"],
             mach=t["mach"],
+            iff_transponder=t.get("iff_transponder"),
         )
         for t in [stealth, hypersonic, conventional]
     ]
@@ -244,6 +257,15 @@ THREAT_COLORS = {
     "LOW": "\033[90m",       # Gray
     "UNKNOWN": "\033[37m",   # White
 }
+IFF_COLORS = {
+    "friendly": "\033[92m",         # Green
+    "assumed_friendly": "\033[92m",  # Green
+    "hostile": "\033[91m",           # Red
+    "assumed_hostile": "\033[91m",   # Red
+    "spoof_suspect": "\033[95m",     # Magenta
+    "unknown": "\033[90m",           # Gray
+    "pending": "\033[33m",           # Dark yellow
+}
 RESET = "\033[0m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
@@ -252,7 +274,7 @@ DIM = "\033[2m"
 def _print_header(geo_ctx: GeoContext | None = None):
     print("\033[2J\033[H", end="")  # Clear screen
     print(f"{BOLD}{'=' * 76}")
-    print(f"  SENTINEL  Full-Feature Demo — Phases 12-18")
+    print(f"  SENTINEL  Full-Feature Demo — Phases 12-19")
     print(f"{'=' * 76}{RESET}")
     print(f"  Web dashboard: {BOLD}http://localhost:{PORT}{RESET}")
     if geo_ctx:
@@ -353,11 +375,24 @@ def _print_step(step: int, elapsed: float,
         if method_str:
             method_str += ")"
 
+        # IFF / ROE (Phase 19)
+        iff_str = ""
+        if ft.iff_identification and ft.iff_identification != "unknown":
+            iff_color = IFF_COLORS.get(ft.iff_identification, RESET)
+            iff_label = ft.iff_identification.upper().replace("_", " ")
+            iff_str = f"  {iff_color}IFF:{iff_label}{RESET}"
+            if ft.iff_spoof_suspect:
+                iff_str += f"  {IFF_COLORS['spoof_suspect']}SPOOF{RESET}"
+        roe_str = ""
+        if ft.engagement_auth and ft.engagement_auth != "weapons_hold":
+            roe_str = f"  ROE:{ft.engagement_auth.upper().replace('_', ' ')}"
+
         print(f"    {color}{ft.threat_level:>8s}{RESET}  "
               f"[{sensor_str:>5s}]  "
               f"r={rng:>8s}  az={az:>8s}{temp}"
               f"  q={ft.fusion_quality:.2f}"
               f"{intent_str}{method_str}"
+              f"{iff_str}{roe_str}"
               f"{flag_str}")
 
         # Geodetic position (Phase 16)
@@ -559,10 +594,42 @@ def main() -> None:
         azimuth_gate_deg=5.0,
         stealth_rcs_variation_db=15.0,
     )
+
+    # IFF interrogator + ROE engine (Phase 19)
+    iff_config = IFFConfig(
+        enabled=True,
+        max_interrogation_range_m=50000.0,
+        modes=[IFFMode.MODE_3A, IFFMode.MODE_C, IFFMode.MODE_4],
+        spoof_detection_enabled=True,
+    )
+    iff_interrogator = IFFInterrogator(iff_config)
+    roe_config = ROEConfig(enabled=True)
+    roe_engine = ROEEngine(roe_config)
+
+    # Build IFF target list: (target_id, transponder_or_none, range_m)
+    iff_target_list = []
+    all_target_dicts = [
+        {"target_id": "STEALTH-1", "position": np.array([12000.0, 3000.0])},
+        {"target_id": "HYPER-1", "position": np.array([20000.0, -2000.0])},
+        {"target_id": "CONV-1", "position": np.array([8000.0, 1000.0]),
+         "iff_transponder": IFFTransponder(
+             enabled=True,
+             modes=[IFFMode.MODE_3A, IFFMode.MODE_C, IFFMode.MODE_4],
+             mode_3a_code="1200",
+             mode_4_valid=True,
+             reliability=1.0,
+         )},
+    ]
+    for td in all_target_dicts:
+        range_m = float(np.linalg.norm(td["position"]))
+        iff_target_list.append((td["target_id"], td.get("iff_transponder"), range_m))
+
     fusion = MultiSensorFusion(
         azimuth_gate_deg=10.0,
         thermal_azimuth_gate_deg=8.0,
         intent_estimation_enabled=True,
+        iff_interrogator=iff_interrogator,
+        roe_engine=roe_engine,
     )
 
     # Web dashboard (optional)
@@ -626,6 +693,14 @@ def main() -> None:
 
             track_ms = (time.perf_counter() - t_track_start) * 1000.0
 
+            # --- IFF interrogation (Phase 19) ---
+            iff_interrogator.interrogate_all(iff_target_list, clock.now())
+            iff_results = {
+                tid: iff_interrogator.get_result(tid)
+                for tid, _, _ in iff_target_list
+                if iff_interrogator.get_result(tid) is not None
+            }
+
             # --- Correlation + Fusion (timed) ---
             t_fusion_start = time.perf_counter()
 
@@ -636,6 +711,7 @@ def main() -> None:
                 thermal_tracks=thermal_mgr.confirmed_tracks,
                 correlated_detections=correlated or None,
                 quantum_radar_tracks=quantum_mgr.confirmed_tracks,
+                iff_results=iff_results,
             )
 
             fusion_ms = (time.perf_counter() - t_fusion_start) * 1000.0

@@ -100,6 +100,9 @@ window.ThreatPanel = (function () {
         (t.range_m != null ? " | R:" + (t.range_m / 1000).toFixed(1) + "km" : "") +
         (t.intent && t.intent !== "unknown" ? " | " + t.intent.toUpperCase() : "") +
         (t.threat_confidence ? " | " + Math.round(t.threat_confidence * 100) + "%" : "") +
+        (t.iff_identification && t.iff_identification !== "unknown" ? " | IFF:" + t.iff_identification.toUpperCase() : "") +
+        (t.iff_spoof_suspect ? " | SPOOF" : "") +
+        (t.engagement_auth && t.engagement_auth !== "weapons_hold" ? " | " + t.engagement_auth.toUpperCase().replace(/_/g, " ") : "") +
         (t.is_stealth_candidate ? " | STEALTH" : "") +
         (t.is_hypersonic_candidate ? " | HYPERSONIC" : "");
 

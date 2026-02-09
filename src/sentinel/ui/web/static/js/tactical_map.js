@@ -19,6 +19,12 @@ window.TacticalMap = (function () {
     confirmed: "#00ff00",
     tentative: "#ffff00",
     coasting: "#ffa500",
+    iff_friendly: "#00ff00",
+    iff_assumed_friendly: "#008c00",
+    iff_hostile: "#ff0000",
+    iff_assumed_hostile: "#ff5000",
+    iff_spoof: "#c800c8",
+    iff_pending: "#888888",
   };
 
   function resize() {
@@ -201,9 +207,15 @@ window.TacticalMap = (function () {
         range_m = lerp(prev.range_m, tr.range_m, t);
         az = lerpAngle(prev.azimuth_deg, tr.azimuth_deg, t);
       }
-      // Build label: intent + geo coords
+      // Build label: IFF + intent + ROE + geo coords
       var parts = [];
+      if (tr.iff_identification && tr.iff_identification !== "unknown") {
+        parts.push("IFF:" + tr.iff_identification.toUpperCase());
+      }
       if (tr.intent && tr.intent !== "unknown") parts.push(tr.intent.toUpperCase());
+      if (tr.engagement_auth && tr.engagement_auth !== "weapons_hold") {
+        parts.push(tr.engagement_auth.toUpperCase().replace(/_/g, " "));
+      }
       if (tr.position_geo) {
         parts.push(tr.position_geo.lat.toFixed(3) + "N " + tr.position_geo.lon.toFixed(3) + "E");
       }

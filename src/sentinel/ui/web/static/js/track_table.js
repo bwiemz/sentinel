@@ -38,6 +38,8 @@ window.TrackTable = (function () {
         score: t.score != null ? t.score.toFixed(2) : "",
         threat: "",
         intent: "",
+        iff: "",
+        roe: "",
         _state: t.state,
       });
     });
@@ -53,6 +55,8 @@ window.TrackTable = (function () {
         score: t.score != null ? t.score.toFixed(2) : "",
         threat: "",
         intent: "",
+        iff: "",
+        roe: "",
         _state: t.state,
       });
     });
@@ -68,6 +72,8 @@ window.TrackTable = (function () {
         score: t.score != null ? t.score.toFixed(2) : "",
         threat: "",
         intent: "",
+        iff: "",
+        roe: "",
         _state: t.state,
       });
     });
@@ -83,6 +89,8 @@ window.TrackTable = (function () {
         score: t.fusion_quality != null ? t.fusion_quality.toFixed(2) : "",
         threat: t.threat_level || "",
         intent: t.intent && t.intent !== "unknown" ? t.intent.toUpperCase() : "",
+        iff: t.iff_identification && t.iff_identification !== "unknown" ? t.iff_identification.toUpperCase().replace(/_/g, " ") : "",
+        roe: t.engagement_auth && t.engagement_auth !== "weapons_hold" ? t.engagement_auth.toUpperCase().replace(/_/g, " ") : "",
         _state: "",
       });
     });
@@ -120,8 +128,25 @@ window.TrackTable = (function () {
     return "";
   }
 
-  var COL_COUNT = 9;
-  var FIELDS = ["id", "type", "state", "range", "azimuth", "velocity", "score", "threat", "intent"];
+  function iffColor(iff) {
+    if (iff === "FRIENDLY") return "var(--color-iff-friendly)";
+    if (iff === "ASSUMED FRIENDLY") return "var(--color-iff-assumed-friendly)";
+    if (iff === "HOSTILE") return "var(--color-iff-hostile)";
+    if (iff === "ASSUMED HOSTILE") return "var(--color-iff-assumed-hostile)";
+    if (iff === "SPOOF SUSPECT") return "var(--color-iff-spoof)";
+    if (iff === "PENDING") return "var(--color-iff-pending)";
+    return "";
+  }
+
+  function roeColor(roe) {
+    if (roe === "WEAPONS FREE") return "var(--color-auth-weapons-free)";
+    if (roe === "WEAPONS TIGHT") return "var(--color-auth-weapons-tight)";
+    if (roe === "HOLD FIRE") return "var(--color-auth-hold-fire)";
+    return "";
+  }
+
+  var COL_COUNT = 11;
+  var FIELDS = ["id", "type", "state", "range", "azimuth", "velocity", "score", "threat", "intent", "iff", "roe"];
 
   function ensureRow(index) {
     if (index < tbody.children.length) return tbody.children[index];
@@ -159,6 +184,16 @@ window.TrackTable = (function () {
           if (cells[j].textContent !== text) cells[j].textContent = text;
           var ic = intentColor(val);
           if (cells[j].style.color !== ic) cells[j].style.color = ic;
+        } else if (FIELDS[j] === "iff") {
+          text = val || "";
+          if (cells[j].textContent !== text) cells[j].textContent = text;
+          var ifc = iffColor(val);
+          if (cells[j].style.color !== ifc) cells[j].style.color = ifc;
+        } else if (FIELDS[j] === "roe") {
+          text = val || "";
+          if (cells[j].textContent !== text) cells[j].textContent = text;
+          var rc = roeColor(val);
+          if (cells[j].style.color !== rc) cells[j].style.color = rc;
         } else {
           if (cells[j].textContent !== text) cells[j].textContent = text;
         }
