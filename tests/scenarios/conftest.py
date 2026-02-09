@@ -23,6 +23,7 @@ from sentinel.fusion.multifreq_correlator import (
     CorrelatedDetection,
     MultiFreqCorrelator,
 )
+from sentinel.sensors.environment import EnvironmentModel
 from sentinel.sensors.multifreq_radar_sim import (
     MultiFreqRadarConfig,
     MultiFreqRadarSimulator,
@@ -143,6 +144,7 @@ class ScenarioRunner:
         thermal_fov_deg: float = 60.0,
         quantum_squeeze_r: float = 0.5,
         quantum_max_range_m: float = 15000.0,
+        environment: EnvironmentModel | None = None,
     ):
         self.targets = targets
         self.seed = seed
@@ -155,6 +157,7 @@ class ScenarioRunner:
         self.thermal_fov_deg = thermal_fov_deg
         self.quantum_squeeze_r = quantum_squeeze_r
         self.quantum_max_range_m = quantum_max_range_m
+        self.environment = environment
 
     # ---------------------------------------------------------------
     # Public
@@ -298,6 +301,7 @@ class ScenarioRunner:
             base_detection_probability=self.multifreq_base_pd,
             false_alarm_rate=0.0,
             targets=targets,
+            environment=self.environment,
         )
         return MultiFreqRadarSimulator(cfg, seed=self.seed)
 
@@ -308,6 +312,7 @@ class ScenarioRunner:
             detection_probability=0.95,
             false_alarm_rate=0.0,
             targets=targets,
+            environment=self.environment,
         )
         return ThermalSimulator(cfg, seed=self.seed + 1)
 
@@ -318,5 +323,6 @@ class ScenarioRunner:
             n_modes=50000,
             targets=targets,
             false_alarm_rate=0.0,
+            environment=self.environment,
         )
         return QuantumRadarSimulator(cfg, seed=self.seed + 2)

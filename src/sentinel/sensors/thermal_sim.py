@@ -16,6 +16,7 @@ from sentinel.core.clock import SystemClock
 from sentinel.core.types import Detection, SensorType, TargetType, ThermalBand
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
+from sentinel.sensors.environment import EnvironmentModel
 from sentinel.sensors.physics import ThermalSignature
 from sentinel.utils.coords import azimuth_rad_to_deg, cartesian_to_polar
 
@@ -76,6 +77,7 @@ class ThermalSimConfig:
     detection_probability: float = 0.95
     false_alarm_rate: float = 0.005
     targets: list[ThermalTarget] = field(default_factory=list)
+    environment: EnvironmentModel | None = None
 
     @classmethod
     def from_omegaconf(cls, cfg) -> ThermalSimConfig:
@@ -187,8 +189,16 @@ class ThermalSimulator(AbstractSensor):
             pos = target.position_at(t)
             r, az = cartesian_to_polar(pos[0], pos[1])
 
-            # Range check
-            if r > self._config.max_range_m:
+            # Range check (with visibility-based reduction)
+            env = self._config.environment
+            effective_max_range = self._config.max_range_m
+            if env:
+                effective_max_range = env.effective_thermal_max_range(effective_max_range)
+            if r > effective_max_range:
+                continue
+
+            # Terrain masking
+            if env and not env.is_target_visible(pos[0], pos[1]):
                 continue
 
             # FOV check (azimuth only, thermal has narrow FOV)
@@ -199,6 +209,10 @@ class ThermalSimulator(AbstractSensor):
             # Thermal contrast check
             temp = target.temperature_at(t)
             contrast = temp - self._config.ambient_temperature_k
+            # Cloud cover reduces effective contrast
+            if env and env.use_weather_effects:
+                from sentinel.sensors.environment import weather_thermal_contrast_factor
+                contrast *= weather_thermal_contrast_factor(env.weather)
             if contrast < self._config.min_contrast_k:
                 continue
 
@@ -207,8 +221,11 @@ class ThermalSimulator(AbstractSensor):
             if intensity < 0.05:
                 continue
 
-            # Detection probability
-            if self._rng.rand() > self._config.detection_probability:
+            # Detection probability (with atmospheric transmission)
+            pd = self._config.detection_probability
+            if env:
+                pd *= env.thermal_detection_factor(band, r)
+            if self._rng.rand() > pd:
                 continue
 
             # Add noise (bearing-only: no range noise)

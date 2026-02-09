@@ -32,6 +32,7 @@ from sentinel.sensors.physics import (
     thermal_background_photons,
     tmsv_mean_photons,
 )
+from sentinel.sensors.environment import EnvironmentModel
 from sentinel.sensors.radar_sim import MultiFreqRadarTarget
 from sentinel.utils.coords import (
     azimuth_deg_to_rad,
@@ -69,6 +70,7 @@ class QuantumRadarConfig:
     range_dependent_noise: bool = False
 
     targets: list[MultiFreqRadarTarget] = field(default_factory=list)
+    environment: EnvironmentModel | None = None
 
     @property
     def wavelength_m(self) -> float:
@@ -211,6 +213,11 @@ class QuantumRadarSimulator(AbstractSensor):
             if abs(az) > self._fov_half_rad:
                 continue
 
+            # Terrain masking
+            env = self._config.environment
+            if env and not env.is_target_visible(pos[0], pos[1]):
+                continue
+
             # RCS at X-band (quantum radar operates at X-band)
             rcs_dbsm = target.rcs_at_band(RadarBand.X_BAND)
             rcs_m2 = 10.0 ** (rcs_dbsm / 10.0)
@@ -242,6 +249,12 @@ class QuantumRadarSimulator(AbstractSensor):
 
             # Entanglement fidelity
             fidelity = entanglement_fidelity(eta, ns, nb)
+
+            # Atmospheric loss reduces QI detection probability
+            if env and env.use_atmospheric_propagation:
+                snr_adj = env.radar_snr_adjustment_db(self._config.freq_hz, r)
+                if snr_adj < 0:
+                    pd_qi *= max(0.0, 10.0 ** (snr_adj / 20.0))
 
             # Detection roll uses QI probability
             if self._rng.rand() > pd_qi:

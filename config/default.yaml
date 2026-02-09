@@ -266,6 +266,35 @@ sentinel:
       hypersonic_temp_threshold_k: 1500.0
       stealth_rcs_variation_db: 15.0
 
+  environment:
+    terrain:
+      enabled: false                   # Enable terrain masking (line-of-sight)
+      type: "flat"                     # flat | procedural | ridge
+      resolution_m: 100.0             # Grid cell size
+      extent_m: 50000.0               # Grid extent in each direction
+      max_elevation_m: 500.0          # Max hill height (procedural only)
+      seed: null                       # RNG seed for procedural generation
+    weather:
+      enabled: false                   # Enable weather effects on sensors
+      rain_rate_mm_h: 0.0             # 0=clear, 4=moderate, 16=heavy, 50+=extreme
+      humidity_pct: 50.0
+      temperature_k: 290.0
+      visibility_km: 20.0
+      cloud_cover_pct: 0.0            # 0-100, affects thermal background
+      wind_speed_mps: 0.0
+      sea_state: 0                     # Douglas scale 0-9
+    atmosphere:
+      enabled: false                   # Enable atmospheric propagation losses
+    clutter:
+      enabled: false                   # Enable surface/rain clutter model
+      surface_sigma0_db: -30.0        # Ground reflectivity
+      sea_clutter: false
+      rain_clutter: false
+    sensor_position:
+      x_m: 0.0
+      y_m: 0.0
+      altitude_m: 0.0                 # Meters above sea level
+
   ui:
     hud:
       enabled: true

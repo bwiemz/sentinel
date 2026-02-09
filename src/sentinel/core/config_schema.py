@@ -307,6 +307,56 @@ class FusionConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Environment
+# ---------------------------------------------------------------------------
+
+
+class TerrainEnvConfig(BaseModel):
+    enabled: bool = False
+    type: Literal["flat", "procedural", "ridge"] = "flat"
+    resolution_m: float = Field(default=100.0, gt=0)
+    extent_m: float = Field(default=50000.0, gt=0)
+    max_elevation_m: float = Field(default=500.0, ge=0)
+    seed: int | None = None
+
+
+class WeatherEnvConfig(BaseModel):
+    enabled: bool = False
+    rain_rate_mm_h: float = Field(default=0.0, ge=0)
+    humidity_pct: float = Field(default=50.0, ge=0, le=100)
+    temperature_k: float = Field(default=290.0, gt=0)
+    visibility_km: float = Field(default=20.0, gt=0)
+    cloud_cover_pct: float = Field(default=0.0, ge=0, le=100)
+    wind_speed_mps: float = Field(default=0.0, ge=0)
+    sea_state: int = Field(default=0, ge=0, le=9)
+
+
+class AtmosphereEnvConfig(BaseModel):
+    enabled: bool = False
+
+
+class ClutterEnvConfig(BaseModel):
+    enabled: bool = False
+    surface_sigma0_db: float = -30.0
+    sea_clutter: bool = False
+    rain_clutter: bool = False
+
+
+class SensorPositionConfig(BaseModel):
+    x_m: float = 0.0
+    y_m: float = 0.0
+    altitude_m: float = Field(default=0.0, ge=0)
+
+
+class EnvironmentConfig(BaseModel):
+    terrain: TerrainEnvConfig = Field(default_factory=TerrainEnvConfig)
+    weather: WeatherEnvConfig = Field(default_factory=WeatherEnvConfig)
+    atmosphere: AtmosphereEnvConfig = Field(default_factory=AtmosphereEnvConfig)
+    clutter: ClutterEnvConfig = Field(default_factory=ClutterEnvConfig)
+    sensor_position: SensorPositionConfig = Field(default_factory=SensorPositionConfig)
+
+
 class ScanlineConfig(BaseModel):
     enabled: bool = True
     spacing: int = Field(default=3, gt=0)
@@ -345,6 +395,7 @@ class SentinelRootConfig(BaseModel):
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     tracking: TrackingConfig = Field(default_factory=TrackingConfig)
     fusion: FusionConfig = Field(default_factory=FusionConfig)
+    environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
 
     model_config = {"extra": "allow"}

@@ -15,6 +15,7 @@ from sentinel.core.clock import SystemClock
 from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
+from sentinel.sensors.environment import BAND_CENTER_FREQ_HZ, EnvironmentModel, total_propagation_loss_db
 from sentinel.sensors.radar_sim import MultiFreqRadarTarget
 from sentinel.utils.coords import (
     azimuth_deg_to_rad,
@@ -63,6 +64,7 @@ class MultiFreqRadarConfig:
     base_detection_probability: float = 0.9
     range_dependent_noise: bool = False
     targets: list[MultiFreqRadarTarget] = field(default_factory=list)
+    environment: EnvironmentModel | None = None
 
     def noise_for_band(self, band: RadarBand) -> BandNoiseConfig:
         """Get noise config for a band, falling back to defaults."""
@@ -195,12 +197,27 @@ class MultiFreqRadarSimulator(AbstractSensor):
             if r > self._config.max_range_m or abs(az) > self._fov_half_rad:
                 continue
 
+            # Terrain masking
+            env = self._config.environment
+            if env and not env.is_target_visible(pos[0], pos[1]):
+                continue
+
             # Frequency-dependent detection probability
             pd = target.detection_probability_at_band(
                 band,
                 self._config.base_detection_probability,
                 t,
             )
+
+            # Atmospheric propagation loss (frequency-dependent)
+            if env and env.use_atmospheric_propagation:
+                freq_hz = BAND_CENTER_FREQ_HZ.get(band, 10e9)
+                loss_db = total_propagation_loss_db(
+                    freq_hz, r, env.weather.rain_rate_mm_h,
+                    env.weather.temperature_k, env.weather.humidity_pct,
+                )
+                pd *= max(0.0, 10.0 ** (-loss_db / 20.0))
+
             if self._rng.rand() > pd:
                 continue
 
@@ -241,7 +258,11 @@ class MultiFreqRadarSimulator(AbstractSensor):
         return float(np.dot(velocity, position / r))
 
     def _generate_false_alarms(self, band: RadarBand) -> list[dict]:
-        n_fa = self._rng.poisson(self._config.false_alarm_rate)
+        far = self._config.false_alarm_rate
+        env = self._config.environment
+        if env:
+            far = env.effective_false_alarm_rate(far)
+        n_fa = self._rng.poisson(far)
         alarms = []
         fov_half_deg = self._config.fov_deg / 2
         for _ in range(n_fa):

@@ -51,6 +51,7 @@ Four independent sensor paths run at their native rates. Tracks are fused by ang
 - **Threat classification**: CRITICAL (hypersonic, quantum-confirmed stealth), HIGH (stealth, quantum-only), MEDIUM (multi-sensor conventional), LOW (single-sensor)
 - **Military HUD**: Real-time overlay with track boxes, velocity vectors, targeting reticle, radar/thermal/quantum blips, threat badges, and stealth/hypersonic alert banners
 - **Web dashboard**: Real-time browser-based monitoring via FastAPI/WebSocket -- tactical PPI radar scope, sortable track table, threat cards, per-stage latency bars, MJPEG HUD video feed. Military dark theme, vanilla JS (no build step)
+- **Terrain & environment**: 2D elevation grid with ray-marching line-of-sight, ITU-R P.676/P.838 atmospheric propagation (frequency-dependent), weather effects (rain, fog, cloud cover), surface/rain clutter models. All effects optional and backward-compatible
 
 ### Web Dashboard
 
@@ -90,7 +91,7 @@ sentinel --web
 pytest tests/ -v
 ```
 
-850 tests covering all subsystems.
+972 tests covering all subsystems.
 
 ## Configuration
 
@@ -103,6 +104,7 @@ All settings live in `config/default.yaml` under the `sentinel:` namespace. Key 
 | `sensors.multifreq_radar` | Multi-band radar with per-band noise profiles |
 | `sensors.thermal` | Thermal FLIR simulator with MWIR/LWIR bands |
 | `sensors.quantum_radar` | Quantum illumination radar (QI X-band, TMSV source) |
+| `environment` | Terrain masking, atmospheric propagation, weather effects, clutter |
 | `detection` | YOLOv8 model, confidence, device |
 | `tracking` | Kalman filter params, association gating, track lifecycle |
 | `tracking.association` | Association method (`hungarian`/`jpda`), JPDA parameters |
@@ -114,7 +116,7 @@ All settings live in `config/default.yaml` under the `sentinel:` namespace. Key 
 | `ui.hud` | HUD colors, overlay alpha, scanline effect |
 | `ui.web` | Web dashboard: host, port, update rate, video FPS |
 
-Enable multi-freq radar, thermal, and quantum radar by setting `enabled: true` in their respective sections. When disabled, the system runs in camera-only or camera+single-radar mode (backward compatible). The web dashboard is also disabled by default -- enable with `ui.web.enabled: true` or the `--web` CLI flag.
+Enable multi-freq radar, thermal, and quantum radar by setting `enabled: true` in their respective sections. When disabled, the system runs in camera-only or camera+single-radar mode (backward compatible). Environment effects (terrain masking, atmospheric propagation, weather, clutter) are also disabled by default -- enable each independently in the `environment` section. The web dashboard is also disabled by default -- enable with `ui.web.enabled: true` or the `--web` CLI flag.
 
 ## Project Structure
 
@@ -136,6 +138,7 @@ sentinel/
       multifreq_radar_sim.py  # 5-band radar simulator
       thermal_sim.py          # Thermal FLIR simulator (bearing-only)
       quantum_radar_sim.py    # Quantum illumination radar simulator
+      environment.py          # Terrain, atmosphere, weather, clutter models
       physics.py              # RCS profiles, plasma sheath, thermal signatures, QI physics
       frame.py                # SensorFrame container
     detection/
@@ -171,9 +174,9 @@ sentinel/
       bridge.py               # WebDashboard lifecycle manager
       static/                 # Frontend: HTML, CSS, JS (vanilla, no build step)
   tests/
-    unit/test_*.py            # 806 unit tests
-    integration/test_*.py     # 20 integration tests
-    scenarios/test_*.py       # 24 scenario validation tests
+    unit/test_*.py            # 901 unit tests
+    integration/test_*.py     # 37 integration tests
+    scenarios/test_*.py       # 34 scenario validation tests
 ```
 
 ## Physics Models
@@ -264,6 +267,7 @@ P_total = 1 - product(1 - P_i)
 | 9 | Association & fusion integrity: JPDA, temporal alignment, statistical distance, NIS monitoring | `636d08b` |
 | 10 | Real-time web dashboard: FastAPI, WebSocket, PPI radar scope, threat cards, MJPEG feed | `86e769c` |
 | 11 | Scenario validation: stealth ingress, hypersonic raid, multi-target swarm, mixed threat | `3287f3c` |
+| 12 | Terrain & environment: terrain masking, atmospheric propagation, weather effects, clutter models | -- |
 
 ## Dependencies
 

@@ -15,6 +15,7 @@ from sentinel.core.clock import SystemClock
 from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
+from sentinel.sensors.environment import EnvironmentModel, total_propagation_loss_db
 from sentinel.sensors.physics import RCSProfile, _snr_to_pd, radar_snr
 from sentinel.utils.coords import (
     azimuth_deg_to_rad,
@@ -65,6 +66,7 @@ class RadarSimConfig:
     range_dependent_noise: bool = False
     use_snr_pd: bool = False
     targets: list[RadarTarget] = field(default_factory=list)
+    environment: EnvironmentModel | None = None
 
     @classmethod
     def from_omegaconf(cls, cfg) -> RadarSimConfig:
@@ -153,13 +155,26 @@ class RadarSimulator(AbstractSensor):
             if abs(az) > self._fov_half_rad:
                 continue
 
+            # Terrain masking
+            env = self._config.environment
+            if env and not env.is_target_visible(pos[0], pos[1]):
+                continue
+
             # Detection probability: SNR-based or flat
             if self._config.use_snr_pd:
                 rcs_m2 = 10.0 ** (target.rcs_dbsm / 10.0)
                 snr = radar_snr(rcs_m2, r, ref_range_m=self._config.max_range_m)
+                if env:
+                    snr += env.radar_snr_adjustment_db(10e9, r)
                 pd = _snr_to_pd(snr)
             else:
                 pd = self._config.detection_probability
+                if env and env.use_atmospheric_propagation:
+                    loss_db = total_propagation_loss_db(
+                        10e9, r, env.weather.rain_rate_mm_h,
+                        env.weather.temperature_k, env.weather.humidity_pct,
+                    )
+                    pd *= max(0.0, 10.0 ** (-loss_db / 20.0))
             if self._rng.rand() > pd:
                 continue
 
@@ -215,7 +230,11 @@ class RadarSimulator(AbstractSensor):
 
     def _generate_false_alarms(self) -> list[dict]:
         """Generate false alarm detections uniformly in the FOV."""
-        n_fa = self._rng.poisson(self._config.false_alarm_rate)
+        far = self._config.false_alarm_rate
+        env = self._config.environment
+        if env:
+            far = env.effective_false_alarm_rate(far)
+        n_fa = self._rng.poisson(far)
         alarms = []
         fov_half_deg = self._config.fov_deg / 2
         for _ in range(n_fa):
