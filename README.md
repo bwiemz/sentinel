@@ -270,7 +270,7 @@ P_total = 1 - product(1 - P_i)
 | 10 | Real-time web dashboard: FastAPI, WebSocket, PPI radar scope, threat cards, MJPEG feed | `86e769c` |
 | 11 | Scenario validation: stealth ingress, hypersonic raid, multi-target swarm, mixed threat | `3287f3c` |
 | 12 | Terrain & environment: terrain masking, atmospheric propagation, weather effects, clutter models | `c8ba6fd` |
-| 13 | Electronic warfare: noise/deceptive jamming, chaff, decoys, ECCM, QI jamming resistance | -- |
+| 13 | Electronic warfare: noise/deceptive jamming, chaff, decoys, ECCM, QI jamming resistance | `3f4e07a` |
 
 ## Dependencies
 
