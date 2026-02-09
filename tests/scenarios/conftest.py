@@ -25,6 +25,7 @@ from sentinel.fusion.multifreq_correlator import (
 )
 from sentinel.core.clock import Clock, SimClock
 from sentinel.sensors.environment import EnvironmentModel
+from sentinel.utils.geo_context import GeoContext
 from sentinel.sensors.multifreq_radar_sim import (
     MultiFreqRadarConfig,
     MultiFreqRadarSimulator,
@@ -63,6 +64,7 @@ class ScenarioTarget:
     expected_threat: str
     expected_stealth: bool = False
     expected_hypersonic: bool = False
+    position_geo: tuple[float, float, float] | None = None  # (lat, lon, alt)
 
 
 @dataclass
@@ -148,8 +150,11 @@ class ScenarioRunner:
         environment: EnvironmentModel | None = None,
         clock: Clock | None = None,
         step_dt: float = 0.1,
+        geo_context: GeoContext | None = None,
     ):
         self.targets = targets
+        self.geo_context = geo_context
+        self._resolve_geodetic_positions()
         self.seed = seed
         self.n_steps = n_steps
         self.use_multifreq = use_multifreq
@@ -163,6 +168,20 @@ class ScenarioRunner:
         self.environment = environment
         self.clock = clock
         self.step_dt = step_dt
+
+    # ---------------------------------------------------------------
+    # Geodetic resolution
+    # ---------------------------------------------------------------
+
+    def _resolve_geodetic_positions(self) -> None:
+        """Convert position_geo to ENU position for targets that specify it."""
+        if self.geo_context is None:
+            return
+        for t in self.targets:
+            if t.position_geo is not None:
+                lat, lon = t.position_geo[0], t.position_geo[1]
+                alt = t.position_geo[2] if len(t.position_geo) > 2 else 0.0
+                t.position = self.geo_context.target_geodetic_to_xy(lat, lon, alt)
 
     # ---------------------------------------------------------------
     # Public
@@ -184,9 +203,9 @@ class ScenarioRunner:
         qi_sim = self._create_quantum_sim(qi_targets, clock=clock) if self.use_quantum else None
 
         # Create track managers
-        radar_mgr = RadarTrackManager(radar_tracking_config())
-        thermal_mgr = ThermalTrackManager(thermal_tracking_config()) if self.use_thermal else None
-        quantum_mgr = RadarTrackManager(radar_tracking_config()) if self.use_quantum else None
+        radar_mgr = RadarTrackManager(radar_tracking_config(), geo_context=self.geo_context)
+        thermal_mgr = ThermalTrackManager(thermal_tracking_config(), geo_context=self.geo_context) if self.use_thermal else None
+        quantum_mgr = RadarTrackManager(radar_tracking_config(), geo_context=self.geo_context) if self.use_quantum else None
 
         # Connect
         mf_sim.connect()

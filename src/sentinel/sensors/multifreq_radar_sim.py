@@ -23,6 +23,7 @@ from sentinel.utils.coords import (
     cartesian_to_polar,
     polar_to_cartesian,
 )
+from sentinel.utils.geo_context import GeoContext
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +66,16 @@ class MultiFreqRadarConfig:
     range_dependent_noise: bool = False
     targets: list[MultiFreqRadarTarget] = field(default_factory=list)
     environment: EnvironmentModel | None = None
+    geo_context: GeoContext | None = None
 
     def noise_for_band(self, band: RadarBand) -> BandNoiseConfig:
         """Get noise config for a band, falling back to defaults."""
         return self.band_configs.get(band, DEFAULT_BAND_NOISE.get(band, BandNoiseConfig()))
 
     @classmethod
-    def from_omegaconf(cls, cfg) -> MultiFreqRadarConfig:
+    def from_omegaconf(
+        cls, cfg, geo_context: GeoContext | None = None,
+    ) -> MultiFreqRadarConfig:
         """Create from OmegaConf DictConfig."""
         # Parse bands
         band_names = cfg.get("bands", ["x_band"])
@@ -94,10 +98,17 @@ class MultiFreqRadarConfig:
         scenario = cfg.get("scenario", {})
         for t in scenario.get("targets", []):
             tt_str = t.get("target_type", "conventional")
+            pos_geo = t.get("position_geo", None)
+            if pos_geo is not None and geo_context is not None:
+                alt = pos_geo[2] if len(pos_geo) > 2 else 0.0
+                xy = geo_context.target_geodetic_to_xy(pos_geo[0], pos_geo[1], alt)
+                position = xy
+            else:
+                position = np.array(t.get("position", [0, 0]), dtype=float)
             targets.append(
                 MultiFreqRadarTarget(
                     target_id=t.get("id", "TGT"),
-                    position=np.array(t.get("position", [0, 0]), dtype=float),
+                    position=position,
                     velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
                     rcs_dbsm=t.get("rcs_dbsm", 10.0),
                     class_name=t.get("class_name", "unknown"),
@@ -117,6 +128,7 @@ class MultiFreqRadarConfig:
             base_detection_probability=noise.get("detection_probability", cfg.get("base_detection_probability", 0.9)),
             range_dependent_noise=noise.get("range_dependent", False),
             targets=targets,
+            geo_context=geo_context,
         )
 
 
@@ -131,7 +143,8 @@ class MultiFreqRadarSimulator(AbstractSensor):
     """
 
     def __init__(self, config: MultiFreqRadarConfig, seed: int | None = None,
-                 clock: Clock | None = None):
+                 clock: Clock | None = None,
+                 geo_context: GeoContext | None = None):
         self._config = config
         self._rng = np.random.RandomState(seed)
         self._clock = clock if clock is not None else SystemClock()
@@ -139,6 +152,7 @@ class MultiFreqRadarSimulator(AbstractSensor):
         self._start_time = 0.0
         self._scan_count = 0
         self._fov_half_rad = azimuth_deg_to_rad(config.fov_deg / 2)
+        self._geo_context = geo_context if geo_context is not None else config.geo_context
 
     def connect(self) -> bool:
         self._connected = True

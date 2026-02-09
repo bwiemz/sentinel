@@ -40,6 +40,7 @@ from sentinel.utils.coords import (
     cartesian_to_polar,
     polar_to_cartesian,
 )
+from sentinel.utils.geo_context import GeoContext
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class QuantumRadarConfig:
 
     targets: list[MultiFreqRadarTarget] = field(default_factory=list)
     environment: EnvironmentModel | None = None
+    geo_context: GeoContext | None = None
 
     @property
     def wavelength_m(self) -> float:
@@ -93,7 +95,9 @@ class QuantumRadarConfig:
         return receiver_efficiency(self.receiver_type)
 
     @classmethod
-    def from_omegaconf(cls, cfg) -> QuantumRadarConfig:
+    def from_omegaconf(
+        cls, cfg, geo_context: GeoContext | None = None,
+    ) -> QuantumRadarConfig:
         """Create from OmegaConf DictConfig (sentinel.sensors.quantum_radar)."""
         noise = cfg.get("noise", {})
 
@@ -117,10 +121,17 @@ class QuantumRadarConfig:
                 "stealth": TargetType.STEALTH,
                 "hypersonic": TargetType.HYPERSONIC,
             }
+            pos_geo = t.get("position_geo", None)
+            if pos_geo is not None and geo_context is not None:
+                alt = pos_geo[2] if len(pos_geo) > 2 else 0.0
+                xy = geo_context.target_geodetic_to_xy(pos_geo[0], pos_geo[1], alt)
+                position = xy
+            else:
+                position = np.array(t.get("position", [0, 0]), dtype=float)
             targets.append(
                 MultiFreqRadarTarget(
                     target_id=t.get("id", "QI-TGT"),
-                    position=np.array(t.get("position", [0, 0]), dtype=float),
+                    position=position,
                     velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
                     rcs_dbsm=t.get("rcs_dbsm", 10.0),
                     class_name=t.get("class_name", "unknown"),
@@ -146,6 +157,7 @@ class QuantumRadarConfig:
             false_alarm_rate=noise.get("false_alarm_rate", 0.005),
             range_dependent_noise=noise.get("range_dependent", False),
             targets=targets,
+            geo_context=geo_context,
         )
 
 
@@ -162,7 +174,8 @@ class QuantumRadarSimulator(AbstractSensor):
     """
 
     def __init__(self, config: QuantumRadarConfig, seed: int | None = None,
-                 clock: Clock | None = None):
+                 clock: Clock | None = None,
+                 geo_context: GeoContext | None = None):
         self._config = config
         self._rng = np.random.RandomState(seed)
         self._clock = clock if clock is not None else SystemClock()
@@ -170,6 +183,7 @@ class QuantumRadarSimulator(AbstractSensor):
         self._start_time = 0.0
         self._scan_count = 0
         self._fov_half_rad = azimuth_deg_to_rad(config.fov_deg / 2)
+        self._geo_context = geo_context if geo_context is not None else config.geo_context
 
     def connect(self) -> bool:
         self._connected = True

@@ -21,8 +21,9 @@ class RadarTrackManager:
         config: DictConfig with filter, association, track_management sections.
     """
 
-    def __init__(self, config: DictConfig):
+    def __init__(self, config: DictConfig, geo_context=None):
         self._tracks: dict[str, RadarTrack] = {}
+        self._geo_context = geo_context
         self._dt = config.filter.get("dt", 0.1)
         self._confirm_hits = config.track_management.get("confirm_hits", 3)
         self._max_coast = config.track_management.get("max_coast_frames", 5)
@@ -103,6 +104,7 @@ class RadarTrackManager:
             coast_reconfirm_hits=self._coast_reconfirm,
             filter_type=self._filter_type,
             use_doppler=self._use_doppler,
+            geo_context=self._geo_context,
         )
         self._tracks[track.track_id] = track
         logger.debug("Radar track initiated: %s", track.track_id)

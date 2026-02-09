@@ -47,6 +47,14 @@ class RadarNoiseConfig(BaseModel):
     use_snr_pd: bool = False
 
 
+class GeoReferenceConfig(BaseModel):
+    enabled: bool = False
+    lat: float = 0.0
+    lon: float = 0.0
+    alt: float = 0.0
+    name: str = ""
+
+
 class RadarScenarioTarget(BaseModel):
     id: str
     position: list[float]
@@ -55,6 +63,7 @@ class RadarScenarioTarget(BaseModel):
     class_name: str = "unknown"
     target_type: str | None = None
     mach: float | None = None
+    position_geo: list[float] | None = None
 
 
 class RadarScenarioConfig(BaseModel):
@@ -424,6 +433,7 @@ class SentinelRootConfig(BaseModel):
     fusion: FusionConfig = Field(default_factory=FusionConfig)
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
+    geo_reference: GeoReferenceConfig = Field(default_factory=GeoReferenceConfig)
 
     model_config = {"extra": "allow"}
 

@@ -22,6 +22,7 @@ from sentinel.utils.coords import (
     polar_to_cartesian,
     polar_to_cartesian_3d,
 )
+from sentinel.utils.geo_context import GeoContext
 
 
 class RadarTrack(TrackBase):
@@ -58,6 +59,7 @@ class RadarTrack(TrackBase):
         filter_type: str = "ekf",
         use_3d: bool = False,
         use_doppler: bool = False,
+        geo_context: GeoContext | None = None,
     ):
         _meas_dim = 3 if use_3d or use_doppler else 2
         super().__init__(
@@ -69,6 +71,7 @@ class RadarTrack(TrackBase):
             confirmed_coast_misses=confirmed_coast_misses,
             coast_reconfirm_hits=coast_reconfirm_hits,
             measurement_dim=_meas_dim,
+            geo_context=geo_context,
         )
         self._use_3d = use_3d
         self._use_doppler = use_doppler
@@ -222,12 +225,20 @@ class RadarTrack(TrackBase):
         return float(np.degrees(np.arctan2(pos[2], r_xy)))
 
     @property
+    def position_geo(self) -> tuple[float, float, float] | None:
+        """Geodetic position (lat, lon, alt) or None if no geo_context."""
+        if self._geo_context is None:
+            return None
+        pos = self.position
+        return self._geo_context.xy_to_geodetic(pos[0], pos[1])
+
+    @property
     def predicted_bbox(self) -> np.ndarray | None:
         """Not applicable for radar tracks."""
         return None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             "track_id": self.track_id,
             "state": self.state.value,
             "position_m": self.position.tolist(),
@@ -239,3 +250,12 @@ class RadarTrack(TrackBase):
             "hits": self.hits,
             "misses": self.misses,
         }
+        if self._geo_context is not None:
+            geo = self.position_geo
+            if geo is not None:
+                d["position_geo"] = {
+                    "lat": round(geo[0], 7),
+                    "lon": round(geo[1], 7),
+                    "alt": round(geo[2], 2),
+                }
+        return d

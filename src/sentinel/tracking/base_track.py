@@ -41,6 +41,7 @@ class TrackBase:
         confirmed_coast_misses: int = 5,
         coast_reconfirm_hits: int = 2,
         measurement_dim: int | None = None,
+        geo_context=None,
     ):
         self.track_id = track_id or generate_track_id()
         self.state = TrackState.TENTATIVE
@@ -55,6 +56,9 @@ class TrackBase:
 
         # Temporal alignment support
         self.last_update_time: float = 0.0
+
+        # Geodetic reference context (None = raw Cartesian mode)
+        self._geo_context = geo_context
 
         # Filter consistency monitoring (NIS-based)
         self.quality_monitor: FilterConsistencyMonitor | None = None
@@ -146,6 +150,15 @@ class TrackBase:
             )
         else:
             self.score = min(1.0, hit_ratio * 0.4 + recency * 0.3 + confirmation * 0.3)
+
+    @property
+    def geo_context(self):
+        """Optional geodetic reference context."""
+        return self._geo_context
+
+    @geo_context.setter
+    def geo_context(self, value):
+        self._geo_context = value
 
     @property
     def is_alive(self) -> bool:

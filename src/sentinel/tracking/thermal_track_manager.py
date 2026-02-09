@@ -16,7 +16,8 @@ class ThermalTrackManager:
     Same pattern as RadarTrackManager but for bearing-only thermal detections.
     """
 
-    def __init__(self, config: DictConfig):
+    def __init__(self, config: DictConfig, geo_context=None):
+        self._geo_context = geo_context
         self._confirm_hits = config.get("track_management", {}).get("confirm_hits", 3)
         self._max_coast = config.get("track_management", {}).get("max_coast_frames", 10)
         self._max_tracks = config.get("track_management", {}).get("max_tracks", 50)
@@ -77,6 +78,7 @@ class ThermalTrackManager:
                 tentative_delete_misses=self._tent_delete,
                 confirmed_coast_misses=self._conf_coast,
                 coast_reconfirm_hits=self._coast_reconfirm,
+                geo_context=self._geo_context,
             )
             self._tracks[track.track_id] = track
 

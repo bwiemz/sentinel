@@ -155,6 +155,7 @@ class MultiSensorFusion:
                 confidence=ft.confidence,
                 sensor_sources=ft.sensor_sources,
                 fusion_quality=ft.fusion_quality,
+                position_geo=ft.position_geo,
             )
             enhanced.append(eft)
 

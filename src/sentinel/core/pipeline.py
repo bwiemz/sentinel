@@ -23,6 +23,7 @@ from sentinel.sensors.camera import CameraAdapter
 from sentinel.tracking.track import Track
 from sentinel.tracking.track_manager import TrackManager
 from sentinel.ui.hud.renderer import HUDRenderer
+from sentinel.utils.geo_context import GeoContext
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,18 @@ class SentinelPipeline:
             "render_ms": 0.0,
         }
         self._timing_alpha = 0.1  # EMA smoothing factor
+
+        # Geodetic reference context (Phase 16)
+        geo_cfg = config.sentinel.get("geo_reference", {})
+        self._geo_context: GeoContext | None = GeoContext.from_config(geo_cfg)
+        if self._geo_context is not None:
+            logger.info(
+                "Geodetic reference enabled: %s (%.6f, %.6f, alt=%.1f m)",
+                self._geo_context.name or "unnamed",
+                self._geo_context.lat0_deg,
+                self._geo_context.lon0_deg,
+                self._geo_context.alt0_m,
+            )
 
         # Per-sensor health trackers
         self._sensor_health: dict[str, _SensorHealth] = {
@@ -192,8 +205,8 @@ class SentinelPipeline:
         from sentinel.tracking.radar_track_manager import RadarTrackManager
 
         radar_cfg = config.sentinel.sensors.radar
-        sim_config = RadarSimConfig.from_omegaconf(radar_cfg)
-        self._radar = RadarSimulator(sim_config, clock=self._clock)
+        sim_config = RadarSimConfig.from_omegaconf(radar_cfg, geo_context=self._geo_context)
+        self._radar = RadarSimulator(sim_config, clock=self._clock, geo_context=self._geo_context)
 
         # Build radar tracking config
         radar_tracking = config.sentinel.get("tracking", {}).get("radar", {})
@@ -235,8 +248,8 @@ class SentinelPipeline:
         from sentinel.sensors.multifreq_radar_sim import MultiFreqRadarConfig, MultiFreqRadarSimulator
 
         mfr_cfg = config.sentinel.sensors.multifreq_radar
-        mfr_config = MultiFreqRadarConfig.from_omegaconf(mfr_cfg)
-        self._multifreq_radar = MultiFreqRadarSimulator(mfr_config, clock=self._clock)
+        mfr_config = MultiFreqRadarConfig.from_omegaconf(mfr_cfg, geo_context=self._geo_context)
+        self._multifreq_radar = MultiFreqRadarSimulator(mfr_config, clock=self._clock, geo_context=self._geo_context)
 
         corr_cfg = config.sentinel.get("fusion", {}).get("multifreq_correlation", {})
         threat_cfg = config.sentinel.get("fusion", {}).get("threat_classification", {})
@@ -274,8 +287,8 @@ class SentinelPipeline:
         from sentinel.tracking.thermal_track_manager import ThermalTrackManager
 
         thm_cfg = config.sentinel.sensors.thermal
-        thm_config = ThermalSimConfig.from_omegaconf(thm_cfg)
-        self._thermal = ThermalSimulator(thm_config, clock=self._clock)
+        thm_config = ThermalSimConfig.from_omegaconf(thm_cfg, geo_context=self._geo_context)
+        self._thermal = ThermalSimulator(thm_config, clock=self._clock, geo_context=self._geo_context)
 
         thermal_tracking = config.sentinel.get("tracking", {}).get("thermal", {})
         thermal_track_cfg = OmegaConf.create(
@@ -306,8 +319,8 @@ class SentinelPipeline:
         from sentinel.tracking.radar_track_manager import RadarTrackManager
 
         qr_cfg = config.sentinel.sensors.quantum_radar
-        qr_config = QuantumRadarConfig.from_omegaconf(qr_cfg)
-        self._quantum_radar = QuantumRadarSimulator(qr_config, clock=self._clock)
+        qr_config = QuantumRadarConfig.from_omegaconf(qr_cfg, geo_context=self._geo_context)
+        self._quantum_radar = QuantumRadarSimulator(qr_config, clock=self._clock, geo_context=self._geo_context)
 
         # Reuse RadarTrackManager with quantum radar tracking params
         qr_tracking = config.sentinel.get("tracking", {}).get("quantum_radar", {})

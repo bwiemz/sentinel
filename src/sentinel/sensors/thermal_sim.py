@@ -19,6 +19,7 @@ from sentinel.sensors.frame import SensorFrame
 from sentinel.sensors.environment import EnvironmentModel
 from sentinel.sensors.physics import ThermalSignature
 from sentinel.utils.coords import azimuth_rad_to_deg, cartesian_to_polar
+from sentinel.utils.geo_context import GeoContext
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +79,12 @@ class ThermalSimConfig:
     false_alarm_rate: float = 0.005
     targets: list[ThermalTarget] = field(default_factory=list)
     environment: EnvironmentModel | None = None
+    geo_context: GeoContext | None = None
 
     @classmethod
-    def from_omegaconf(cls, cfg) -> ThermalSimConfig:
+    def from_omegaconf(
+        cls, cfg, geo_context: GeoContext | None = None,
+    ) -> ThermalSimConfig:
         """Create from OmegaConf DictConfig."""
         noise = cfg.get("noise", {})
         band_names = cfg.get("bands", ["mwir", "lwir"])
@@ -90,10 +94,17 @@ class ThermalSimConfig:
         scenario = cfg.get("scenario", {})
         for t in scenario.get("targets", []):
             tt_str = t.get("target_type", "conventional")
+            pos_geo = t.get("position_geo", None)
+            if pos_geo is not None and geo_context is not None:
+                alt = pos_geo[2] if len(pos_geo) > 2 else 0.0
+                xy = geo_context.target_geodetic_to_xy(pos_geo[0], pos_geo[1], alt)
+                position = xy
+            else:
+                position = np.array(t.get("position", [0, 0]), dtype=float)
             targets.append(
                 ThermalTarget(
                     target_id=t.get("id", "TGT"),
-                    position=np.array(t.get("position", [0, 0]), dtype=float),
+                    position=position,
                     velocity=np.array(t.get("velocity", [0, 0]), dtype=float),
                     target_type=TargetType(tt_str),
                     mach=t.get("mach", 0.0),
@@ -114,6 +125,7 @@ class ThermalSimConfig:
             detection_probability=cfg.get("detection_probability", 0.95),
             false_alarm_rate=cfg.get("false_alarm_rate", 0.005),
             targets=targets,
+            geo_context=geo_context,
         )
 
 
@@ -128,7 +140,8 @@ class ThermalSimulator(AbstractSensor):
     """
 
     def __init__(self, config: ThermalSimConfig, seed: int | None = None,
-                 clock: Clock | None = None):
+                 clock: Clock | None = None,
+                 geo_context: GeoContext | None = None):
         self._config = config
         self._rng = np.random.RandomState(seed)
         self._clock = clock if clock is not None else SystemClock()
@@ -136,6 +149,7 @@ class ThermalSimulator(AbstractSensor):
         self._start_time = 0.0
         self._frame_count = 0
         self._fov_half_deg = config.fov_deg / 2
+        self._geo_context = geo_context if geo_context is not None else config.geo_context
 
     def connect(self) -> bool:
         self._connected = True

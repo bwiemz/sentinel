@@ -314,6 +314,13 @@ sentinel:
       radar_gain_db: 30.0
       radar_bandwidth_hz: 1000000.0
 
+  geo_reference:
+    enabled: false
+    lat: 0.0
+    lon: 0.0
+    alt: 0.0
+    name: ""
+
   ui:
     hud:
       enabled: true

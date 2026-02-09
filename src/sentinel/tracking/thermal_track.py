@@ -8,6 +8,7 @@ from sentinel.core.types import Detection
 from sentinel.tracking.base_track import TrackBase
 from sentinel.tracking.filters import BearingOnlyEKF
 from sentinel.utils.coords import azimuth_deg_to_rad, azimuth_rad_to_deg, polar_to_cartesian
+from sentinel.utils.geo_context import GeoContext
 
 
 class ThermalTrack(TrackBase):
@@ -29,6 +30,7 @@ class ThermalTrack(TrackBase):
         tentative_delete_misses: int = 3,
         confirmed_coast_misses: int = 5,
         coast_reconfirm_hits: int = 2,
+        geo_context: GeoContext | None = None,
     ):
         super().__init__(
             track_id=track_id,
@@ -39,6 +41,7 @@ class ThermalTrack(TrackBase):
             confirmed_coast_misses=confirmed_coast_misses,
             coast_reconfirm_hits=coast_reconfirm_hits,
             measurement_dim=1,
+            geo_context=geo_context,
         )
 
         # Initialize EKF
@@ -131,12 +134,20 @@ class ThermalTrack(TrackBase):
         return min(0.3, 0.05 * self.age)
 
     @property
+    def position_geo(self) -> tuple[float, float, float] | None:
+        """Geodetic position (lat, lon, alt) or None if no geo_context."""
+        if self._geo_context is None:
+            return None
+        pos = self.position
+        return self._geo_context.xy_to_geodetic(pos[0], pos[1])
+
+    @property
     def predicted_bbox(self) -> None:
         """Thermal tracks have no bounding box."""
         return None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "track_id": self.track_id,
             "state": self.state.value,
             "position": self.position.tolist(),
@@ -146,3 +157,12 @@ class ThermalTrack(TrackBase):
             "age": self.age,
             "score": self.score,
         }
+        if self._geo_context is not None:
+            geo = self.position_geo
+            if geo is not None:
+                d["position_geo"] = {
+                    "lat": round(geo[0], 7),
+                    "lon": round(geo[1], 7),
+                    "alt": round(geo[2], 2),
+                }
+        return d

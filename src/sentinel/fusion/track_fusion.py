@@ -43,6 +43,7 @@ class FusedTrack:
     fusion_quality: float = 0.0
     fused_state: np.ndarray | None = None
     fused_covariance: np.ndarray | None = None
+    position_geo: dict | None = None
 
     @property
     def is_dual_sensor(self) -> bool:
@@ -50,7 +51,7 @@ class FusedTrack:
         return self.camera_track is not None and self.radar_track is not None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "fused_id": self.fused_id,
             "dual_sensor": self.is_dual_sensor,
             "position_px": self.position_px.tolist() if self.position_px is not None else None,
@@ -63,6 +64,9 @@ class FusedTrack:
             "sources": [s.value for s in self.sensor_sources],
             "fusion_quality": round(self.fusion_quality, 3),
         }
+        if self.position_geo is not None:
+            d["position_geo"] = self.position_geo
+        return d
 
 
 class TrackFusion:
@@ -239,6 +243,18 @@ class TrackFusion:
 
         return cost
 
+    @staticmethod
+    def _extract_position_geo(rdr: RadarTrack) -> dict | None:
+        """Extract geodetic position dict from a radar track, or None."""
+        geo = rdr.position_geo
+        if geo is None:
+            return None
+        return {
+            "lat": round(geo[0], 7),
+            "lon": round(geo[1], 7),
+            "alt": round(geo[2], 2),
+        }
+
     def _make_dual(self, cam: Track, rdr: RadarTrack) -> FusedTrack:
         vel = rdr.velocity
 
@@ -269,6 +285,7 @@ class TrackFusion:
             fusion_quality=min(cam.score, rdr.score),
             fused_state=fused_state,
             fused_covariance=fused_cov,
+            position_geo=self._extract_position_geo(rdr),
         )
 
     def _ci_fuse_states(
@@ -334,4 +351,5 @@ class TrackFusion:
             velocity_mps=float(np.linalg.norm(vel)),
             sensor_sources={SensorType.RADAR},
             fusion_quality=rdr.score * 0.5,
+            position_geo=self._extract_position_geo(rdr),
         )
