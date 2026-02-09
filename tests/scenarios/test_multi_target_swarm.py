@@ -87,6 +87,7 @@ class TestMultiTargetSwarm:
         """No conventional target should be flagged as stealth."""
         runner = ScenarioRunner(
             _swarm_targets(), seed=42, n_steps=15, thermal_fov_deg=90.0,
+            multifreq_base_pd=0.99,  # High pd to ensure multi-band detection
         )
         result = runner.run()
 
@@ -111,6 +112,7 @@ class TestMultiTargetSwarm:
         """All fused tracks should be classified as MEDIUM or LOW."""
         runner = ScenarioRunner(
             _swarm_targets(), seed=42, n_steps=15, thermal_fov_deg=90.0,
+            multifreq_base_pd=0.99,  # High pd to ensure multi-band detection
         )
         result = runner.run()
 

@@ -9,6 +9,11 @@ sentinel:
     log_file: null                # path to log file (null = console only)
     log_json: false               # JSON log output instead of human-readable
 
+  time:
+    mode: "realtime"              # "realtime" or "simulated" (deterministic clock)
+    step_size_s: 0.1              # time step per iteration (simulated mode only)
+    start_epoch: 1000000.0        # initial epoch time (simulated mode only)
+
   sensors:
     camera:
       enabled: true

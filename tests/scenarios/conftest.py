@@ -23,6 +23,7 @@ from sentinel.fusion.multifreq_correlator import (
     CorrelatedDetection,
     MultiFreqCorrelator,
 )
+from sentinel.core.clock import Clock, SimClock
 from sentinel.sensors.environment import EnvironmentModel
 from sentinel.sensors.multifreq_radar_sim import (
     MultiFreqRadarConfig,
@@ -145,6 +146,8 @@ class ScenarioRunner:
         quantum_squeeze_r: float = 0.5,
         quantum_max_range_m: float = 15000.0,
         environment: EnvironmentModel | None = None,
+        clock: Clock | None = None,
+        step_dt: float = 0.1,
     ):
         self.targets = targets
         self.seed = seed
@@ -158,6 +161,8 @@ class ScenarioRunner:
         self.quantum_squeeze_r = quantum_squeeze_r
         self.quantum_max_range_m = quantum_max_range_m
         self.environment = environment
+        self.clock = clock
+        self.step_dt = step_dt
 
     # ---------------------------------------------------------------
     # Public
@@ -165,15 +170,18 @@ class ScenarioRunner:
 
     def run(self) -> ScenarioResult:
         """Execute the scenario and return results."""
+        # Use provided clock or create a deterministic SimClock
+        clock = self.clock if self.clock is not None else SimClock()
+
         # Build per-simulator target lists
         mf_targets = self._build_multifreq_targets()
         th_targets = self._build_thermal_targets()
         qi_targets = self._build_multifreq_targets()  # quantum reuses MultiFreqRadarTarget
 
-        # Create simulators
-        mf_sim = self._create_multifreq_sim(mf_targets)
-        th_sim = self._create_thermal_sim(th_targets) if self.use_thermal else None
-        qi_sim = self._create_quantum_sim(qi_targets) if self.use_quantum else None
+        # Create simulators (all share the same clock for consistency)
+        mf_sim = self._create_multifreq_sim(mf_targets, clock=clock)
+        th_sim = self._create_thermal_sim(th_targets, clock=clock) if self.use_thermal else None
+        qi_sim = self._create_quantum_sim(qi_targets, clock=clock) if self.use_quantum else None
 
         # Create track managers
         radar_mgr = RadarTrackManager(radar_tracking_config())
@@ -194,6 +202,10 @@ class ScenarioRunner:
 
         # Main loop
         for _ in range(self.n_steps):
+            # Step the clock before reading frames (deterministic time advance)
+            if isinstance(clock, SimClock):
+                clock.step(self.step_dt)
+
             # Multi-freq radar
             frame = mf_sim.read_frame()
             dets = multifreq_radar_frame_to_detections(frame)
@@ -293,7 +305,8 @@ class ScenarioRunner:
     # Simulator factories
     # ---------------------------------------------------------------
 
-    def _create_multifreq_sim(self, targets: list[MultiFreqRadarTarget]) -> MultiFreqRadarSimulator:
+    def _create_multifreq_sim(self, targets: list[MultiFreqRadarTarget],
+                              clock: Clock | None = None) -> MultiFreqRadarSimulator:
         cfg = MultiFreqRadarConfig(
             bands=self.multifreq_bands,
             max_range_m=50000.0,
@@ -303,9 +316,10 @@ class ScenarioRunner:
             targets=targets,
             environment=self.environment,
         )
-        return MultiFreqRadarSimulator(cfg, seed=self.seed)
+        return MultiFreqRadarSimulator(cfg, seed=self.seed, clock=clock)
 
-    def _create_thermal_sim(self, targets: list[ThermalTarget]) -> ThermalSimulator:
+    def _create_thermal_sim(self, targets: list[ThermalTarget],
+                            clock: Clock | None = None) -> ThermalSimulator:
         cfg = ThermalSimConfig(
             fov_deg=self.thermal_fov_deg,
             max_range_m=50000.0,
@@ -314,9 +328,10 @@ class ScenarioRunner:
             targets=targets,
             environment=self.environment,
         )
-        return ThermalSimulator(cfg, seed=self.seed + 1)
+        return ThermalSimulator(cfg, seed=self.seed + 1, clock=clock)
 
-    def _create_quantum_sim(self, targets: list[MultiFreqRadarTarget]) -> QuantumRadarSimulator:
+    def _create_quantum_sim(self, targets: list[MultiFreqRadarTarget],
+                            clock: Clock | None = None) -> QuantumRadarSimulator:
         cfg = QuantumRadarConfig(
             max_range_m=self.quantum_max_range_m,
             squeeze_param_r=self.quantum_squeeze_r,
@@ -325,4 +340,4 @@ class ScenarioRunner:
             false_alarm_rate=0.0,
             environment=self.environment,
         )
-        return QuantumRadarSimulator(cfg, seed=self.seed + 2)
+        return QuantumRadarSimulator(cfg, seed=self.seed + 2, clock=clock)

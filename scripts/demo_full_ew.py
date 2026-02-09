@@ -8,8 +8,11 @@ Runs real simulators (multi-freq radar, thermal, quantum illumination) with:
 
 Feeds live data into the web dashboard + prints console summary.
 
-Run:
+Run (real-time):
     python scripts/demo_full_ew.py
+
+Run (deterministic sim clock — fast replay, reproducible):
+    python scripts/demo_full_ew.py --sim
 
 Then open http://localhost:8080 in your browser.
 Press Ctrl+C to stop.
@@ -17,12 +20,15 @@ Press Ctrl+C to stop.
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import threading
 import time
 
 import numpy as np
+
+from sentinel.core.clock import Clock, SimClock, SystemClock
 
 # ---------------------------------------------------------------------------
 # Imports — sensors, tracking, fusion, EW, environment, web UI
@@ -82,9 +88,15 @@ STEP_INTERVAL = 1.0 / UPDATE_HZ
 # Scenario definition
 # ---------------------------------------------------------------------------
 
-def _build_environment() -> EnvironmentModel:
-    """Full environment: weather + EW (jammer + chaff + decoy + ECCM)."""
-    now = time.time()
+def _build_environment(deploy_time: float | None = None) -> EnvironmentModel:
+    """Full environment: weather + EW (jammer + chaff + decoy + ECCM).
+
+    Args:
+        deploy_time: Epoch time for chaff/decoy deployment. Defaults to
+            ``time.time()`` for real-time mode, but should be set to
+            ``clock.now()`` for deterministic sim mode.
+    """
+    now = deploy_time if deploy_time is not None else time.time()
 
     # Weather: light rain
     weather = WeatherConditions(
@@ -246,7 +258,8 @@ def _print_step(step: int, elapsed: float,
                 mf_dets: list, th_dets: list, qi_dets: list,
                 radar_mgr, thermal_mgr, quantum_mgr,
                 correlated, fused: list[EnhancedFusedTrack],
-                env: EnvironmentModel):
+                env: EnvironmentModel,
+                clock: Clock | None = None):
     """Print a compact console summary of the current step."""
     # Move cursor to line 8 (below header)
     print(f"\033[8;0H\033[J", end="")
@@ -263,9 +276,10 @@ def _print_step(step: int, elapsed: float,
           f"Thermal: {len(th_dets)}  |  Quantum: {len(qi_dets)}")
 
     # EW status
+    now = clock.now() if clock else time.time()
     n_jammers = len(env.ew.jammers) if env.ew else 0
-    n_chaff = sum(1 for c in (env.ew.chaff_clouds if env.ew else []) if c.is_active(time.time()))
-    n_decoys = sum(1 for d in (env.ew.decoys if env.ew else []) if d.is_active(time.time()))
+    n_chaff = sum(1 for c in (env.ew.chaff_clouds if env.ew else []) if c.is_active(now))
+    n_decoys = sum(1 for d in (env.ew.decoys if env.ew else []) if d.is_active(now))
     print(f"    {DIM}EW active: {n_jammers} jammer(s), {n_chaff} chaff, {n_decoys} decoy(s){RESET}")
     print()
 
@@ -425,6 +439,22 @@ def _snapshot_from_state(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="SENTINEL full-feature demo")
+    parser.add_argument("--sim", action="store_true",
+                        help="Use deterministic SimClock (fast replay, reproducible)")
+    parser.add_argument("--steps", type=int, default=0,
+                        help="Max steps in --sim mode (0 = unlimited)")
+    args = parser.parse_args()
+
+    use_sim_clock = args.sim
+    max_steps = args.steps
+
+    # Create clock
+    if use_sim_clock:
+        clock: Clock = SimClock(start_epoch=1_000_000.0)
+    else:
+        clock = SystemClock()
+
     # Check for web dependencies
     try:
         import uvicorn
@@ -434,11 +464,11 @@ def main() -> None:
     except ImportError:
         has_web = False
 
-    # Build environment + targets
-    env = _build_environment()
+    # Build environment + targets (deploy_time aligned with clock)
+    env = _build_environment(deploy_time=clock.now())
     radar_targets, thermal_targets = _build_targets()
 
-    # Create simulators
+    # Create simulators (all share the same clock)
     mf_sim = MultiFreqRadarSimulator(
         MultiFreqRadarConfig(
             bands=[RadarBand.VHF, RadarBand.UHF, RadarBand.L_BAND, RadarBand.S_BAND, RadarBand.X_BAND],
@@ -450,6 +480,7 @@ def main() -> None:
             environment=env,
         ),
         seed=42,
+        clock=clock,
     )
     th_sim = ThermalSimulator(
         ThermalSimConfig(
@@ -461,6 +492,7 @@ def main() -> None:
             environment=env,
         ),
         seed=43,
+        clock=clock,
     )
     qi_sim = QuantumRadarSimulator(
         QuantumRadarConfig(
@@ -472,6 +504,7 @@ def main() -> None:
             environment=env,
         ),
         seed=44,
+        clock=clock,
     )
 
     # Create track managers
@@ -510,6 +543,11 @@ def main() -> None:
     _print_header()
     if not has_web:
         print(f"  {DIM}(Web dashboard unavailable — install with: pip install -e '.[web]'){RESET}\n")
+    if use_sim_clock:
+        mode_str = f"SimClock (epoch={clock.now():.0f})"
+        if max_steps:
+            mode_str += f", max {max_steps} steps"
+        print(f"  {BOLD}Mode:{RESET} {mode_str}\n")
 
     step = 0
     t0 = time.monotonic()
@@ -517,7 +555,11 @@ def main() -> None:
     try:
         while True:
             step += 1
-            elapsed = time.monotonic() - t0
+
+            # Advance sim clock before reading frames
+            if isinstance(clock, SimClock):
+                clock.step(STEP_INTERVAL)
+            elapsed = clock.elapsed()
 
             # --- Detection phase (timed) ---
             t_detect_start = time.perf_counter()
@@ -562,6 +604,7 @@ def main() -> None:
                 mf_dets, th_dets, qi_dets,
                 radar_mgr, thermal_mgr, quantum_mgr,
                 correlated, fused, env,
+                clock=clock,
             )
 
             # --- Web dashboard ---
@@ -575,8 +618,14 @@ def main() -> None:
                 )
                 buf.update(snapshot)
 
-            # Pace the loop
-            time.sleep(STEP_INTERVAL)
+            # Pace the loop (real-time only; sim mode runs at full speed)
+            if not use_sim_clock:
+                time.sleep(STEP_INTERVAL)
+
+            # Max steps in sim mode
+            if max_steps and step >= max_steps:
+                print(f"\n  {BOLD}Reached {max_steps} steps — stopping.{RESET}")
+                break
 
     except KeyboardInterrupt:
         print(f"\n\n  {BOLD}Shutting down...{RESET}")
@@ -584,7 +633,9 @@ def main() -> None:
         mf_sim.disconnect()
         th_sim.disconnect()
         qi_sim.disconnect()
-        print(f"  {DIM}Ran {step} steps in {time.monotonic() - t0:.1f}s{RESET}")
+        wall_time = time.monotonic() - t0
+        print(f"  {DIM}Ran {step} steps in {wall_time:.1f}s wall-clock "
+              f"(sim elapsed: {clock.elapsed():.1f}s){RESET}")
         print(f"  Done.\n")
 
 

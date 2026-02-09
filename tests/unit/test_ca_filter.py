@@ -144,6 +144,9 @@ class TestConstantAccelerationEKF:
         # True target at (5000, 3000) moving slowly
         true_x, true_y = 5000.0, 3000.0
         ekf.x = np.array([4000.0, 0.0, 0.0, 2000.0, 0.0, 0.0])
+        # Widen position uncertainty to reflect the large initial error
+        ekf.P[0, 0] = 1e6
+        ekf.P[3, 3] = 1e6
         true_range = np.sqrt(true_x**2 + true_y**2)
         true_az = np.arctan2(true_y, true_x)
         for _ in range(50):

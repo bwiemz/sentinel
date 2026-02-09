@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from sentinel.core.clock import SystemClock
+from sentinel.core.clock import Clock, SystemClock
 from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
@@ -111,10 +111,11 @@ class RadarSimulator(AbstractSensor):
         seed: Optional RNG seed for reproducibility.
     """
 
-    def __init__(self, config: RadarSimConfig, seed: int | None = None):
+    def __init__(self, config: RadarSimConfig, seed: int | None = None,
+                 clock: Clock | None = None):
         self._config = config
         self._rng = np.random.RandomState(seed)
-        self._clock = SystemClock()
+        self._clock = clock if clock is not None else SystemClock()
         self._connected = False
         self._start_time = 0.0
         self._scan_count = 0
@@ -209,11 +210,10 @@ class RadarSimulator(AbstractSensor):
         # EW false targets (deceptive jammers, chaff, decoys)
         env = self._config.environment
         if env and env.use_ew_effects:
-            import time as _time
             ew_returns = env.get_ew_false_detections(
                 sensor_pos=np.array([0.0, 0.0]),
                 rng=np.random.default_rng(self._rng.randint(0, 2**31)),
-                t=_time.time(),
+                t=self._clock.now(),
             )
             for ew_ret in ew_returns:
                 detections.append({

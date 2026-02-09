@@ -285,22 +285,30 @@ class TestDopplerEKF:
         ekf_dop = ExtendedKalmanFilterWithDoppler(dt=0.1)
         ekf_dop.x = np.array([4000.0, 0.0, 2000.0, 0.0])
 
-        n_steps = 20
-        for _ in range(n_steps):
+        n_steps = 50
+        for i in range(n_steps):
+            # Move target along its trajectory for realistic velocity tracking
+            t = i * 0.1
+            cur_x = true_x + true_vx * t
+            cur_y = true_y + true_vy * t
+            cur_r = np.sqrt(cur_x**2 + cur_y**2)
+            cur_az = np.arctan2(cur_y, cur_x)
+            cur_vr = (cur_x * true_vx + cur_y * true_vy) / cur_r
+
             r_noise = np.random.randn() * 5.0
             az_noise = np.random.randn() * np.radians(1.0)
             vr_noise = np.random.randn() * 0.5
 
             ekf_std.predict()
-            ekf_std.update(np.array([true_r + r_noise, true_az + az_noise]))
+            ekf_std.update(np.array([cur_r + r_noise, cur_az + az_noise]))
 
             ekf_dop.predict()
             ekf_dop.update(
                 np.array(
                     [
-                        true_r + r_noise,
-                        true_az + az_noise,
-                        true_vr + vr_noise,
+                        cur_r + r_noise,
+                        cur_az + az_noise,
+                        cur_vr + vr_noise,
                     ]
                 )
             )

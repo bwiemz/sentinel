@@ -7,7 +7,7 @@ import platform
 
 import cv2
 
-from sentinel.core.clock import SystemClock
+from sentinel.core.clock import Clock, SystemClock
 from sentinel.core.types import SensorType
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
@@ -35,6 +35,7 @@ class CameraAdapter(AbstractSensor):
         fps: int = 30,
         buffer_size: int = 1,
         backend: str = "auto",
+        clock: Clock | None = None,
     ):
         self._source = source
         self._width = width
@@ -43,7 +44,7 @@ class CameraAdapter(AbstractSensor):
         self._buffer_size = buffer_size
         self._backend = backend
         self._cap: cv2.VideoCapture | None = None
-        self._clock = SystemClock()
+        self._clock = clock if clock is not None else SystemClock()
         self._frame_count = 0
         self._is_file = isinstance(source, str) and not source.startswith("rtsp")
 

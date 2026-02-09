@@ -16,7 +16,7 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 from sentinel.core.bus import EventBus
-from sentinel.core.clock import FrameTimer, SystemClock
+from sentinel.core.clock import Clock, FrameTimer, SystemClock
 from sentinel.core.types import Detection
 from sentinel.detection.yolo import YOLODetector
 from sentinel.sensors.camera import CameraAdapter
@@ -57,9 +57,9 @@ class SentinelPipeline:
     Radar components are only initialized when sentinel.sensors.radar.enabled is true.
     """
 
-    def __init__(self, config: DictConfig):
+    def __init__(self, config: DictConfig, clock: Clock | None = None):
         self._config = config
-        self._clock = SystemClock()
+        self._clock = clock if clock is not None else SystemClock()
         self._timer = FrameTimer(window_size=60)
         self._bus = EventBus()
         self._running = False
@@ -99,6 +99,7 @@ class SentinelPipeline:
             fps=cam_cfg.get("fps", 30),
             buffer_size=cam_cfg.get("buffer_size", 1),
             backend=cam_cfg.get("backend", "auto"),
+            clock=self._clock,
         )
 
         # Initialize detector
@@ -192,7 +193,7 @@ class SentinelPipeline:
 
         radar_cfg = config.sentinel.sensors.radar
         sim_config = RadarSimConfig.from_omegaconf(radar_cfg)
-        self._radar = RadarSimulator(sim_config)
+        self._radar = RadarSimulator(sim_config, clock=self._clock)
 
         # Build radar tracking config
         radar_tracking = config.sentinel.get("tracking", {}).get("radar", {})
@@ -235,7 +236,7 @@ class SentinelPipeline:
 
         mfr_cfg = config.sentinel.sensors.multifreq_radar
         mfr_config = MultiFreqRadarConfig.from_omegaconf(mfr_cfg)
-        self._multifreq_radar = MultiFreqRadarSimulator(mfr_config)
+        self._multifreq_radar = MultiFreqRadarSimulator(mfr_config, clock=self._clock)
 
         corr_cfg = config.sentinel.get("fusion", {}).get("multifreq_correlation", {})
         threat_cfg = config.sentinel.get("fusion", {}).get("threat_classification", {})
@@ -274,7 +275,7 @@ class SentinelPipeline:
 
         thm_cfg = config.sentinel.sensors.thermal
         thm_config = ThermalSimConfig.from_omegaconf(thm_cfg)
-        self._thermal = ThermalSimulator(thm_config)
+        self._thermal = ThermalSimulator(thm_config, clock=self._clock)
 
         thermal_tracking = config.sentinel.get("tracking", {}).get("thermal", {})
         thermal_track_cfg = OmegaConf.create(
@@ -306,7 +307,7 @@ class SentinelPipeline:
 
         qr_cfg = config.sentinel.sensors.quantum_radar
         qr_config = QuantumRadarConfig.from_omegaconf(qr_cfg)
-        self._quantum_radar = QuantumRadarSimulator(qr_config)
+        self._quantum_radar = QuantumRadarSimulator(qr_config, clock=self._clock)
 
         # Reuse RadarTrackManager with quantum radar tracking params
         qr_tracking = config.sentinel.get("tracking", {}).get("quantum_radar", {})

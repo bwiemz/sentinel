@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from sentinel.core.clock import SystemClock
+from sentinel.core.clock import Clock, SystemClock
 from sentinel.core.types import Detection, RadarBand, SensorType, TargetType
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
@@ -161,10 +161,11 @@ class QuantumRadarSimulator(AbstractSensor):
     fidelity), allowing reuse of the existing RadarTrackManager.
     """
 
-    def __init__(self, config: QuantumRadarConfig, seed: int | None = None):
+    def __init__(self, config: QuantumRadarConfig, seed: int | None = None,
+                 clock: Clock | None = None):
         self._config = config
         self._rng = np.random.RandomState(seed)
-        self._clock = SystemClock()
+        self._clock = clock if clock is not None else SystemClock()
         self._connected = False
         self._start_time = 0.0
         self._scan_count = 0

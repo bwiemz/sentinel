@@ -409,8 +409,15 @@ class UIConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class TimeConfig(BaseModel):
+    mode: Literal["realtime", "simulated"] = "realtime"
+    step_size_s: float = Field(default=0.1, gt=0)
+    start_epoch: float = Field(default=1_000_000.0, gt=0)
+
+
 class SentinelRootConfig(BaseModel):
     system: SystemConfig = Field(default_factory=SystemConfig)
+    time: TimeConfig = Field(default_factory=TimeConfig)
     sensors: SensorsConfig = Field(default_factory=SensorsConfig)
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     tracking: TrackingConfig = Field(default_factory=TrackingConfig)

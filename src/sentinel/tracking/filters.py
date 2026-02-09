@@ -177,7 +177,9 @@ class ExtendedKalmanFilter:
         self.x = np.zeros(dim_state)
 
         # State covariance -- high initial uncertainty
-        self.P = np.eye(dim_state) * 1000.0
+        # Velocity variance 1e6 = σ_v ≈ 1000 m/s — covers subsonic through
+        # hypersonic targets before the filter converges on actual velocity.
+        self.P = np.eye(dim_state) * 1e6
         self.P[0, 0] = 100.0  # Position x (meters)
         self.P[2, 2] = 100.0  # Position y (meters)
 
@@ -451,8 +453,9 @@ class ConstantAccelerationKF:
 
         self.x = np.zeros(dim_state)
 
-        # State covariance
-        self.P = np.eye(dim_state) * 1000.0
+        # State covariance — wide velocity/accel uncertainty for
+        # subsonic-to-hypersonic targets (consistent with EKF classes).
+        self.P = np.eye(dim_state) * 1e6
         self.P[0, 0] = 10.0  # position x
         self.P[3, 3] = 10.0  # position y
 
@@ -571,7 +574,8 @@ class ConstantAccelerationEKF:
         self.dt = dt
 
         self.x = np.zeros(dim_state)
-        self.P = np.eye(dim_state) * 1000.0
+        # Wide velocity/accel uncertainty for subsonic-to-hypersonic targets.
+        self.P = np.eye(dim_state) * 1e6
         self.P[0, 0] = 100.0
         self.P[3, 3] = 100.0
 
@@ -692,7 +696,8 @@ class KalmanFilter3D:
         self.dt = dt
 
         self.x = np.zeros(6)
-        self.P = np.eye(6) * 1000.0
+        # Wide velocity uncertainty for subsonic-to-hypersonic targets.
+        self.P = np.eye(6) * 1e6
         self.P[0, 0] = 100.0
         self.P[2, 2] = 100.0
         self.P[4, 4] = 100.0
@@ -790,7 +795,8 @@ class ExtendedKalmanFilter3D:
         self.dt = dt
 
         self.x = np.zeros(6)
-        self.P = np.eye(6) * 1000.0
+        # Wide velocity uncertainty for subsonic-to-hypersonic targets.
+        self.P = np.eye(6) * 1e6
         self.P[0, 0] = 100.0
         self.P[2, 2] = 100.0
         self.P[4, 4] = 100.0
@@ -950,7 +956,9 @@ class ExtendedKalmanFilterWithDoppler:
         self.dt = dt
 
         self.x = np.zeros(dim_state)
-        self.P = np.eye(dim_state) * 1000.0
+        # Velocity variance 1e6 = σ_v ≈ 1000 m/s — consistent with
+        # ExtendedKalmanFilter for subsonic-to-hypersonic tracking.
+        self.P = np.eye(dim_state) * 1e6
         self.P[0, 0] = 100.0
         self.P[2, 2] = 100.0
 

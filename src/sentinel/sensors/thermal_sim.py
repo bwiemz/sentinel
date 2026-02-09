@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from sentinel.core.clock import SystemClock
+from sentinel.core.clock import Clock, SystemClock
 from sentinel.core.types import Detection, SensorType, TargetType, ThermalBand
 from sentinel.sensors.base import AbstractSensor
 from sentinel.sensors.frame import SensorFrame
@@ -127,10 +127,11 @@ class ThermalSimulator(AbstractSensor):
     azimuth_deg, elevation_deg, temperature_k, thermal_band, intensity, target_id
     """
 
-    def __init__(self, config: ThermalSimConfig, seed: int | None = None):
+    def __init__(self, config: ThermalSimConfig, seed: int | None = None,
+                 clock: Clock | None = None):
         self._config = config
         self._rng = np.random.RandomState(seed)
-        self._clock = SystemClock()
+        self._clock = clock if clock is not None else SystemClock()
         self._connected = False
         self._start_time = 0.0
         self._frame_count = 0
@@ -250,10 +251,9 @@ class ThermalSimulator(AbstractSensor):
         # EW decoy thermal returns (most decoys have no IR → typically empty)
         env = self._config.environment
         if env and env.use_ew_effects:
-            import time as _time
             ew_thermal = env.get_ew_thermal_returns(
                 sensor_pos=np.array([0.0, 0.0]),
-                t=_time.time(),
+                t=self._clock.now(),
             )
             for ret in ew_thermal:
                 detections.append({
