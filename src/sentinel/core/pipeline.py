@@ -362,6 +362,10 @@ class SentinelPipeline:
             use_temporal_alignment=fusion_cfg.get("temporal_alignment", False),
             use_statistical_distance=fusion_cfg.get("use_statistical_distance", False),
             statistical_distance_gate=fusion_cfg.get("statistical_distance_gate", 9.21),
+            threat_classification_method=threat_cfg.get("method", "rule_based"),
+            threat_model_path=threat_cfg.get("model_path", None),
+            threat_confidence_threshold=threat_cfg.get("confidence_threshold", 0.6),
+            intent_estimation_enabled=threat_cfg.get("intent_estimation", False),
         )
 
         logger.info("Multi-sensor fusion initialized (camera + radar + thermal)")

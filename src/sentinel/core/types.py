@@ -43,6 +43,26 @@ class TargetType(enum.Enum):
     HYPERSONIC = "hypersonic"
 
 
+class ThreatLevel(enum.Enum):
+    """Threat classification level."""
+
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class IntentType(enum.Enum):
+    """Estimated target intent/behavior pattern."""
+
+    TRANSIT = "transit"
+    PATROL = "patrol"
+    APPROACH = "approach"
+    ATTACK = "attack"
+    EVASION = "evasion"
+    UNKNOWN = "unknown"
+
+
 class TrackState(enum.Enum):
     TENTATIVE = "tentative"
     CONFIRMED = "confirmed"

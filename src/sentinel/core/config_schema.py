@@ -294,6 +294,10 @@ class MultiFreqCorrelationConfig(BaseModel):
 
 
 class ThreatClassificationConfig(BaseModel):
+    method: Literal["rule_based", "ml"] = "rule_based"
+    model_path: str = "models/threat_classifier.joblib"
+    confidence_threshold: float = Field(default=0.6, ge=0, le=1)
+    intent_estimation: bool = False
     hypersonic_temp_threshold_k: float = Field(default=1500.0, gt=0)
     stealth_rcs_variation_db: float = Field(default=15.0, gt=0)
 

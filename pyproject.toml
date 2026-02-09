@@ -29,6 +29,10 @@ web = [
     "uvicorn>=0.23",
     "websockets>=11.0",
 ]
+ml = [
+    "scikit-learn>=1.3",
+    "joblib>=1.3",
+]
 dev = [
     "pytest>=7.0",
     "pytest-benchmark",
@@ -37,7 +41,7 @@ dev = [
     "ruff>=0.1",
     "pybind11>=2.11",
 ]
-all = ["sentinel[web,dev]"]
+all = ["sentinel[web,ml,dev]"]
 
 [project.scripts]
 sentinel = "sentinel.__main__:main"

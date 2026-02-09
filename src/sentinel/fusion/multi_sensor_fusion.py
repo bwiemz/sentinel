@@ -46,6 +46,11 @@ class EnhancedFusedTrack(FusedTrack):
     is_decoy_candidate: bool = False
     is_chaff_candidate: bool = False
     threat_level: str = "UNKNOWN"
+    threat_confidence: float = 0.0
+    threat_probabilities: dict[str, float] = field(default_factory=dict)
+    threat_method: str = "rule_based"
+    intent: str = "unknown"
+    intent_confidence: float = 0.0
 
     @property
     def sensor_count(self) -> int:
@@ -73,6 +78,10 @@ class EnhancedFusedTrack(FusedTrack):
                 "is_decoy_candidate": self.is_decoy_candidate,
                 "is_chaff_candidate": self.is_chaff_candidate,
                 "threat_level": self.threat_level,
+                "threat_confidence": self.threat_confidence,
+                "threat_method": self.threat_method,
+                "intent": self.intent,
+                "intent_confidence": self.intent_confidence,
                 "radar_bands": self.radar_bands_detected,
                 "thermal_bands": self.thermal_bands_detected,
             }
@@ -107,6 +116,10 @@ class MultiSensorFusion:
         use_temporal_alignment: bool = False,
         use_statistical_distance: bool = False,
         statistical_distance_gate: float = 9.21,
+        threat_classification_method: str = "rule_based",
+        threat_model_path: str | None = None,
+        threat_confidence_threshold: float = 0.6,
+        intent_estimation_enabled: bool = False,
     ):
         self._base_fusion = TrackFusion(
             camera_hfov_deg=camera_hfov_deg,
@@ -123,6 +136,27 @@ class MultiSensorFusion:
         self._min_fusion_quality = min_fusion_quality
         self._hypersonic_temp_k = hypersonic_temp_threshold_k
         self._stealth_rcs_var_db = stealth_rcs_variation_db
+
+        # ML threat classification (lazy imports — sklearn not required for rule_based)
+        self._threat_classifier = None
+        self._intent_estimator = None
+        if threat_classification_method == "ml":
+            try:
+                from sentinel.classification.threat_classifier import ThreatClassifier
+
+                self._threat_classifier = ThreatClassifier(
+                    model_path=threat_model_path,
+                    confidence_threshold=threat_confidence_threshold,
+                )
+            except Exception:
+                logger.warning("ML threat classifier unavailable, using rule-based")
+        if intent_estimation_enabled:
+            try:
+                from sentinel.classification.intent_estimator import IntentEstimator
+
+                self._intent_estimator = IntentEstimator()
+            except Exception:
+                logger.warning("Intent estimator unavailable")
 
     def fuse(
         self,
@@ -173,7 +207,21 @@ class MultiSensorFusion:
 
         # Classify threats
         for eft in enhanced:
-            eft.threat_level = self._classify_threat(eft)
+            rule_level = self._classify_threat(eft)
+            if self._threat_classifier is not None:
+                result = self._threat_classifier.classify(eft, rule_level)
+                eft.threat_level = result.predicted_level
+                eft.threat_confidence = result.confidence
+                eft.threat_probabilities = result.probabilities
+                eft.threat_method = result.method_used
+            else:
+                eft.threat_level = rule_level
+                eft.threat_confidence = 1.0
+                eft.threat_method = "rule_based"
+            if self._intent_estimator is not None:
+                intent_result = self._intent_estimator.estimate(eft)
+                eft.intent = intent_result.intent.value
+                eft.intent_confidence = intent_result.confidence
             eft.fusion_quality = self._compute_fusion_quality(eft)
 
         # Filter by minimum fusion quality

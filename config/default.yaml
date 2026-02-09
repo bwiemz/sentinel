@@ -268,6 +268,10 @@ sentinel:
       range_gate_m: 500.0
       azimuth_gate_deg: 3.0
     threat_classification:
+      method: "rule_based"                  # "rule_based" or "ml"
+      model_path: "models/threat_classifier.joblib"
+      confidence_threshold: 0.6             # below this, fall back to rule-based
+      intent_estimation: false              # enable kinematic intent estimation
       hypersonic_temp_threshold_k: 1500.0
       stealth_rcs_variation_db: 15.0
 
