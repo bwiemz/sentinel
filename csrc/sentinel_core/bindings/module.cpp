@@ -8,6 +8,7 @@ void bind_cost_matrix(py::module_& m);
 void bind_jpda(py::module_& m);
 void bind_physics(py::module_& m);
 void bind_geodetic(py::module_& m);
+void bind_batch(py::module_& m);
 
 PYBIND11_MODULE(_sentinel_core, m) {
     m.doc() = "SENTINEL C++ acceleration kernels";
@@ -29,4 +30,7 @@ PYBIND11_MODULE(_sentinel_core, m) {
 
     auto geodetic = m.def_submodule("geodetic", "WGS84 geodetic conversions");
     bind_geodetic(geodetic);
+
+    auto batch = m.def_submodule("batch", "Batch operations for cost matrices");
+    bind_batch(batch);
 }

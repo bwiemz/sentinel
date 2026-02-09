@@ -98,26 +98,53 @@ class HungarianAssociator:
         n_dets = len(det_list)
         cost = np.full((n_tracks, n_dets), INFEASIBLE)
 
-        for i, ti in enumerate(track_indices):
-            track = tracks[ti]
-            for j, dj in enumerate(det_list):
-                det = detections[dj]
-                if det.bbox is None:
-                    continue
-                center = det.bbox_center
-                if center is None:
-                    continue
+        # --- Batch cost matrix computation ---
+        # Extract valid detection data
+        valid_det = np.zeros(n_dets, dtype=bool)
+        centers = []
+        det_bboxes = []
+        for j, dj in enumerate(det_list):
+            det = detections[dj]
+            c = det.bbox_center if det.bbox is not None else None
+            if c is not None:
+                valid_det[j] = True
+                centers.append(c)
+                det_bboxes.append(det.bbox)
 
-                maha = track.kf.gating_distance(center)
-                if maha > self._gate_threshold:
+        if valid_det.any():
+            # Extract track KF data
+            states = [tracks[ti].kf.x for ti in track_indices]
+            covs = [tracks[ti].kf.P for ti in track_indices]
+            H = tracks[track_indices[0]].kf.H
+            R = tracks[track_indices[0]].kf.R
+
+            # Batch Mahalanobis gating
+            from sentinel.tracking.batch_ops import batch_kf_cost_matrix, batch_iou_matrix
+
+            maha = batch_kf_cost_matrix(states, covs, centers, H, R, gate=self._gate_threshold)
+
+            # Batch IoU
+            track_bboxes = []
+            has_pred_bbox = []
+            for ti in track_indices:
+                pb = tracks[ti].predicted_bbox
+                has_pred_bbox.append(pb is not None)
+                track_bboxes.append(pb if pb is not None else np.zeros(4))
+
+            iou = batch_iou_matrix(np.array(track_bboxes), np.array(det_bboxes))
+
+            # Combine into cost matrix (only for valid detections)
+            valid_j = 0
+            for j in range(n_dets):
+                if not valid_det[j]:
                     continue
-
-                iou_cost = 1.0
-                pred_bbox = track.predicted_bbox
-                if pred_bbox is not None:
-                    iou_cost = 1.0 - iou_bbox(pred_bbox, det.bbox)
-
-                cost[i, j] = self._maha_weight * maha + self._iou_weight * iou_cost
+                for i in range(n_tracks):
+                    m = maha[i, valid_j]
+                    if np.isinf(m):
+                        continue
+                    iou_cost = (1.0 - iou[i, valid_j]) if has_pred_bbox[i] else 1.0
+                    cost[i, j] = self._maha_weight * m + self._iou_weight * iou_cost
+                valid_j += 1
 
         row_idx, col_idx = linear_sum_assignment(cost)
 

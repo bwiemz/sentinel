@@ -207,11 +207,17 @@ class JPDAAssociator:
 
                 gated.append(j)
                 innovations.append(y)
-                likelihoods_list.append(_gaussian_likelihood(y, S))
+
+            # Batch compute likelihoods for all gated innovations
+            if innovations:
+                from sentinel.tracking.batch_ops import batch_gaussian_likelihood
+                likelihoods_arr = batch_gaussian_likelihood(np.vstack(innovations), S)
+            else:
+                likelihoods_arr = np.array([])
 
             track_gated_dets.append(gated)
             track_innovations.append(innovations)
-            track_likelihoods.append(np.array(likelihoods_list) if likelihoods_list else np.array([]))
+            track_likelihoods.append(likelihoods_arr)
 
         # Compute betas and update each track
         matched_pairs = []
@@ -363,11 +369,17 @@ class RadarJPDAAssociator:
 
                 gated.append(j)
                 innovations.append(y)
-                likelihoods_list.append(_gaussian_likelihood(y, S))
+
+            # Batch compute likelihoods for all gated innovations
+            if innovations:
+                from sentinel.tracking.batch_ops import batch_gaussian_likelihood
+                likelihoods_arr = batch_gaussian_likelihood(np.vstack(innovations), S)
+            else:
+                likelihoods_arr = np.array([])
 
             track_gated_dets.append(gated)
             track_innovations.append(innovations)
-            track_likelihoods.append(np.array(likelihoods_list) if likelihoods_list else np.array([]))
+            track_likelihoods.append(likelihoods_arr)
 
         # Compute betas and update each track
         matched_pairs = []
@@ -503,11 +515,17 @@ class ThermalJPDAAssociator:
 
                 gated.append(j)
                 innovations.append(y)
-                likelihoods_list.append(_gaussian_likelihood(y, S))
+
+            # Batch compute likelihoods for all gated innovations
+            if innovations:
+                from sentinel.tracking.batch_ops import batch_gaussian_likelihood
+                likelihoods_arr = batch_gaussian_likelihood(np.vstack(innovations), S)
+            else:
+                likelihoods_arr = np.array([])
 
             track_gated_dets.append(gated)
             track_innovations.append(innovations)
-            track_likelihoods.append(np.array(likelihoods_list) if likelihoods_list else np.array([]))
+            track_likelihoods.append(likelihoods_arr)
 
         # Compute betas and update
         matched_pairs = []

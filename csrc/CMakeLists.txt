@@ -33,6 +33,7 @@ add_library(sentinel_core_lib STATIC
     sentinel_core/src/jpda_ops.cpp
     sentinel_core/src/physics_ops.cpp
     sentinel_core/src/geodetic_ops.cpp
+    sentinel_core/src/batch_ops.cpp
 )
 target_include_directories(sentinel_core_lib PUBLIC
     sentinel_core/include
@@ -55,6 +56,7 @@ pybind11_add_module(_sentinel_core
     sentinel_core/bindings/bind_jpda.cpp
     sentinel_core/bindings/bind_physics.cpp
     sentinel_core/bindings/bind_geodetic.cpp
+    sentinel_core/bindings/bind_batch.cpp
 )
 target_link_libraries(_sentinel_core PRIVATE sentinel_core_lib)
 

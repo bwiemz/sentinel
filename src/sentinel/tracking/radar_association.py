@@ -72,26 +72,48 @@ class RadarAssociator:
         n_dets = len(det_list)
         cost = np.full((n_tracks, n_dets), INFEASIBLE)
 
-        for i, ti in enumerate(track_indices):
-            track = tracks[ti]
-            for j, dj in enumerate(det_list):
-                det = detections[dj]
-                if det.range_m is None or det.azimuth_deg is None:
+        # --- Batch EKF cost matrix computation ---
+        # Filter valid detections
+        valid_det = np.zeros(n_dets, dtype=bool)
+        measurements = []
+        det_velocities: list[float | None] = []
+        for j, dj in enumerate(det_list):
+            det = detections[dj]
+            if det.range_m is not None and det.azimuth_deg is not None:
+                valid_det[j] = True
+                measurements.append(np.array([det.range_m, azimuth_deg_to_rad(det.azimuth_deg)]))
+                det_velocities.append(det.velocity_mps)
+
+        if valid_det.any():
+            from sentinel.tracking.batch_ops import batch_ekf_cost_matrix
+
+            states = [tracks[ti].ekf.x for ti in track_indices]
+            covs = [tracks[ti].ekf.P for ti in track_indices]
+            jacs = [tracks[ti].ekf.H_jacobian(tracks[ti].ekf.x) for ti in track_indices]
+            h_preds = [tracks[ti].ekf.predicted_measurement for ti in track_indices]
+            R = tracks[track_indices[0]].ekf.R
+
+            maha_mat = batch_ekf_cost_matrix(
+                states, covs, measurements, jacs, h_preds, R,
+                angular_indices=[1], gate=self._gate_threshold,
+            )
+
+            # Map back to cost matrix, applying velocity gating
+            valid_j = 0
+            for j in range(n_dets):
+                if not valid_det[j]:
                     continue
-
-                z = np.array([det.range_m, azimuth_deg_to_rad(det.azimuth_deg)])
-                maha = track.ekf.gating_distance(z)
-
-                if maha > self._gate_threshold:
-                    continue
-
-                # Velocity gating
-                if self._velocity_gate is not None and det.velocity_mps is not None:
-                    track_speed = float(np.linalg.norm(track.velocity))
-                    if abs(det.velocity_mps - track_speed) > self._velocity_gate:
+                for i, ti in enumerate(track_indices):
+                    m = maha_mat[i, valid_j]
+                    if np.isinf(m):
                         continue
-
-                cost[i, j] = maha
+                    # Velocity gating
+                    if self._velocity_gate is not None and det_velocities[valid_j] is not None:
+                        track_speed = float(np.linalg.norm(tracks[ti].velocity))
+                        if abs(det_velocities[valid_j] - track_speed) > self._velocity_gate:
+                            continue
+                    cost[i, j] = m
+                valid_j += 1
 
         row_idx, col_idx = linear_sum_assignment(cost)
 
