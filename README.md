@@ -48,10 +48,11 @@ Four independent sensor paths run at their native rates. Tracks are fused by ang
 - **Track quality monitoring**: Normalized Innovation Squared (NIS) metrics with rolling-window filter consistency monitor (nominal/over-confident/under-confident/diverged health states)
 - **Temporal alignment**: Predict all tracks to a common reference epoch before fusion using constant-velocity propagation with CWNA process noise -- eliminates 171m error at Mach 5 per 100ms sensor time offset
 - **Statistical fusion**: Mahalanobis track-to-track distance replaces angular heuristics for cross-sensor correlation, with camera-to-world coordinate projection
-- **Threat classification**: CRITICAL (hypersonic, quantum-confirmed stealth), HIGH (stealth, quantum-only), MEDIUM (multi-sensor conventional), LOW (single-sensor)
+- **Threat classification**: CRITICAL (hypersonic, quantum-confirmed stealth), HIGH (stealth, quantum-only), MEDIUM (multi-sensor conventional), LOW (single-sensor, chaff, decoy)
 - **Military HUD**: Real-time overlay with track boxes, velocity vectors, targeting reticle, radar/thermal/quantum blips, threat badges, and stealth/hypersonic alert banners
 - **Web dashboard**: Real-time browser-based monitoring via FastAPI/WebSocket -- tactical PPI radar scope, sortable track table, threat cards, per-stage latency bars, MJPEG HUD video feed. Military dark theme, vanilla JS (no build step)
 - **Terrain & environment**: 2D elevation grid with ray-marching line-of-sight, ITU-R P.676/P.838 atmospheric propagation (frequency-dependent), weather effects (rain, fog, cloud cover), surface/rain clutter models. All effects optional and backward-compatible
+- **Electronic warfare**: Noise jamming (J/S ratio, SNR degradation, burn-through range), deceptive jamming (RGPO false targets), chaff clouds (high uniform RCS, drag deceleration, time decay), expendable decoys (radar-only, no IR). ECCM countermeasures: sidelobe blanking, frequency agility, burn-through mode, QI ECCM (entangled photons resist noise jamming -- 6 dB advantage). Fusion-layer discrimination: chaff flagged by cross-band RCS uniformity, decoys flagged by radar-only/no-thermal signature. All EW effects default OFF and backward-compatible
 
 ### Web Dashboard
 
@@ -91,7 +92,7 @@ sentinel --web
 pytest tests/ -v
 ```
 
-972 tests covering all subsystems.
+1070 tests covering all subsystems.
 
 ## Configuration
 
@@ -104,7 +105,7 @@ All settings live in `config/default.yaml` under the `sentinel:` namespace. Key 
 | `sensors.multifreq_radar` | Multi-band radar with per-band noise profiles |
 | `sensors.thermal` | Thermal FLIR simulator with MWIR/LWIR bands |
 | `sensors.quantum_radar` | Quantum illumination radar (QI X-band, TMSV source) |
-| `environment` | Terrain masking, atmospheric propagation, weather effects, clutter |
+| `environment` | Terrain masking, atmospheric propagation, weather effects, clutter, electronic warfare |
 | `detection` | YOLOv8 model, confidence, device |
 | `tracking` | Kalman filter params, association gating, track lifecycle |
 | `tracking.association` | Association method (`hungarian`/`jpda`), JPDA parameters |
@@ -116,7 +117,7 @@ All settings live in `config/default.yaml` under the `sentinel:` namespace. Key 
 | `ui.hud` | HUD colors, overlay alpha, scanline effect |
 | `ui.web` | Web dashboard: host, port, update rate, video FPS |
 
-Enable multi-freq radar, thermal, and quantum radar by setting `enabled: true` in their respective sections. When disabled, the system runs in camera-only or camera+single-radar mode (backward compatible). Environment effects (terrain masking, atmospheric propagation, weather, clutter) are also disabled by default -- enable each independently in the `environment` section. The web dashboard is also disabled by default -- enable with `ui.web.enabled: true` or the `--web` CLI flag.
+Enable multi-freq radar, thermal, and quantum radar by setting `enabled: true` in their respective sections. When disabled, the system runs in camera-only or camera+single-radar mode (backward compatible). Environment effects (terrain masking, atmospheric propagation, weather, clutter, electronic warfare) are also disabled by default -- enable each independently in the `environment` section. The web dashboard is also disabled by default -- enable with `ui.web.enabled: true` or the `--web` CLI flag.
 
 ## Project Structure
 
@@ -139,6 +140,7 @@ sentinel/
       thermal_sim.py          # Thermal FLIR simulator (bearing-only)
       quantum_radar_sim.py    # Quantum illumination radar simulator
       environment.py          # Terrain, atmosphere, weather, clutter models
+      ew.py                   # Electronic warfare: jamming, chaff, decoys, ECCM
       physics.py              # RCS profiles, plasma sheath, thermal signatures, QI physics
       frame.py                # SensorFrame container
     detection/
@@ -174,9 +176,9 @@ sentinel/
       bridge.py               # WebDashboard lifecycle manager
       static/                 # Frontend: HTML, CSS, JS (vanilla, no build step)
   tests/
-    unit/test_*.py            # 901 unit tests
+    unit/test_*.py            # 989 unit tests
     integration/test_*.py     # 37 integration tests
-    scenarios/test_*.py       # 34 scenario validation tests
+    scenarios/test_*.py       # 44 scenario validation tests
 ```
 
 ## Physics Models
@@ -268,6 +270,7 @@ P_total = 1 - product(1 - P_i)
 | 10 | Real-time web dashboard: FastAPI, WebSocket, PPI radar scope, threat cards, MJPEG feed | `86e769c` |
 | 11 | Scenario validation: stealth ingress, hypersonic raid, multi-target swarm, mixed threat | `3287f3c` |
 | 12 | Terrain & environment: terrain masking, atmospheric propagation, weather effects, clutter models | `c8ba6fd` |
+| 13 | Electronic warfare: noise/deceptive jamming, chaff, decoys, ECCM, QI jamming resistance | -- |
 
 ## Dependencies
 

@@ -43,6 +43,8 @@ class EnhancedFusedTrack(FusedTrack):
     has_quantum_confirmation: bool = False
     is_stealth_candidate: bool = False
     is_hypersonic_candidate: bool = False
+    is_decoy_candidate: bool = False
+    is_chaff_candidate: bool = False
     threat_level: str = "UNKNOWN"
 
     @property
@@ -68,6 +70,8 @@ class EnhancedFusedTrack(FusedTrack):
                 "has_quantum_confirmation": self.has_quantum_confirmation,
                 "is_stealth_candidate": self.is_stealth_candidate,
                 "is_hypersonic_candidate": self.is_hypersonic_candidate,
+                "is_decoy_candidate": self.is_decoy_candidate,
+                "is_chaff_candidate": self.is_chaff_candidate,
                 "threat_level": self.threat_level,
                 "radar_bands": self.radar_bands_detected,
                 "thermal_bands": self.thermal_bands_detected,
@@ -326,9 +330,27 @@ class MultiSensorFusion:
                 eft.radar_bands_detected = best_cd.bands_detected
                 eft.is_stealth_candidate = best_cd.is_stealth_candidate
                 eft.is_hypersonic_candidate = best_cd.is_hypersonic_candidate
+                eft.is_chaff_candidate = best_cd.is_chaff_candidate
 
     def _classify_threat(self, eft: EnhancedFusedTrack) -> str:
         """Classify threat level based on sensor signatures."""
+        # --- EW discrimination: chaff and decoys are LOW threat ---
+        # Chaff: flagged by multi-freq correlator (high uniform RCS across bands)
+        if eft.is_chaff_candidate:
+            return THREAT_LOW
+
+        # Decoy: radar track exists but no thermal match (most decoys lack IR)
+        # Only flag if not already identified as stealth (stealth also lacks some sensors)
+        if (
+            eft.radar_track is not None
+            and eft.thermal_track is None
+            and not eft.is_stealth_candidate
+            and not eft.has_quantum_confirmation
+            and eft.camera_track is None
+        ):
+            eft.is_decoy_candidate = True
+            return THREAT_LOW
+
         # CRITICAL: hypersonic (extreme thermal + high speed indicators)
         if eft.is_hypersonic_candidate:
             return THREAT_CRITICAL

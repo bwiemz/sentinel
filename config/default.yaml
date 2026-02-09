@@ -294,6 +294,20 @@ sentinel:
       x_m: 0.0
       y_m: 0.0
       altitude_m: 0.0                 # Meters above sea level
+    ew:
+      enabled: false                   # Enable electronic warfare effects
+      jammers: []                      # List of jammer configs
+      chaff_clouds: []                 # List of chaff cloud configs
+      decoys: []                       # List of decoy configs
+      eccm:
+        sidelobe_blanking: false
+        frequency_agility: false
+        burn_through_mode: false
+        quantum_eccm: false
+        quantum_eccm_advantage_db: 6.0
+      radar_peak_power_w: 1000000.0
+      radar_gain_db: 30.0
+      radar_bandwidth_hz: 1000000.0
 
   ui:
     hud:

@@ -349,12 +349,32 @@ class SensorPositionConfig(BaseModel):
     altitude_m: float = Field(default=0.0, ge=0)
 
 
+class ECCMSchemaConfig(BaseModel):
+    sidelobe_blanking: bool = False
+    frequency_agility: bool = False
+    burn_through_mode: bool = False
+    quantum_eccm: bool = False
+    quantum_eccm_advantage_db: float = Field(default=6.0, ge=0)
+
+
+class EWEnvConfig(BaseModel):
+    enabled: bool = False
+    jammers: list[dict] = Field(default_factory=list)
+    chaff_clouds: list[dict] = Field(default_factory=list)
+    decoys: list[dict] = Field(default_factory=list)
+    eccm: ECCMSchemaConfig = Field(default_factory=ECCMSchemaConfig)
+    radar_peak_power_w: float = Field(default=1e6, gt=0)
+    radar_gain_db: float = 30.0
+    radar_bandwidth_hz: float = Field(default=1e6, gt=0)
+
+
 class EnvironmentConfig(BaseModel):
     terrain: TerrainEnvConfig = Field(default_factory=TerrainEnvConfig)
     weather: WeatherEnvConfig = Field(default_factory=WeatherEnvConfig)
     atmosphere: AtmosphereEnvConfig = Field(default_factory=AtmosphereEnvConfig)
     clutter: ClutterEnvConfig = Field(default_factory=ClutterEnvConfig)
     sensor_position: SensorPositionConfig = Field(default_factory=SensorPositionConfig)
+    ew: EWEnvConfig = Field(default_factory=EWEnvConfig)
 
 
 class ScanlineConfig(BaseModel):

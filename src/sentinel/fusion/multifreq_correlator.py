@@ -25,6 +25,7 @@ class CorrelatedDetection:
     combined_rcs_dbsm: float = 0.0
     is_stealth_candidate: bool = False
     is_hypersonic_candidate: bool = False
+    is_chaff_candidate: bool = False
 
     @property
     def num_bands(self) -> int:
@@ -206,10 +207,20 @@ class MultiFreqCorrelator:
             rcs_range = max(rcs_values) - min(rcs_values)
             is_stealth = rcs_range >= self._stealth_rcs_variation_db
 
+        # Check for chaff signature (inverse of stealth):
+        # HIGH absolute RCS (>25 dBsm) + LOW variation across bands (<5 dB)
+        is_chaff = False
+        if len(rcs_values) >= 2:
+            rcs_range = max(rcs_values) - min(rcs_values)
+            max_rcs = max(rcs_values)
+            if max_rcs > 25.0 and rcs_range < 5.0:
+                is_chaff = True
+
         return CorrelatedDetection(
             primary_detection=primary,
             band_detections=dict(group),
             bands_detected=bands,
             combined_rcs_dbsm=float(avg_rcs),
             is_stealth_candidate=is_stealth,
+            is_chaff_candidate=is_chaff,
         )

@@ -84,6 +84,10 @@ class Detection:
     n_signal_photons: float | None = None
     receiver_type: str | None = None
 
+    # Electronic warfare
+    is_ew_generated: bool = False  # True for chaff/decoy/deceptive detections
+    ew_source_id: str | None = None  # Identifies the EW source
+
     # Shared / fused
     position_3d: np.ndarray | None = None  # [x, y, z] world frame
 

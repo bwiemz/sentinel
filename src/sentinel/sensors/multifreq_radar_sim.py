@@ -218,6 +218,13 @@ class MultiFreqRadarSimulator(AbstractSensor):
                 )
                 pd *= max(0.0, 10.0 ** (-loss_db / 20.0))
 
+            # EW noise jamming (per-band: narrowband jammer may only affect specific bands)
+            if env and env.use_ew_effects:
+                freq_hz = BAND_CENTER_FREQ_HZ.get(band, 10e9)
+                ew_adj = env.ew_snr_adjustment_db(r, freq_hz, band)
+                if ew_adj < 0:
+                    pd *= max(0.0, 10.0 ** (ew_adj / 20.0))
+
             if self._rng.rand() > pd:
                 continue
 
@@ -245,6 +252,28 @@ class MultiFreqRadarSimulator(AbstractSensor):
 
         # False alarms for this band
         detections.extend(self._generate_false_alarms(band))
+
+        # EW false targets (chaff, decoys, deceptive) for this band
+        env = self._config.environment
+        if env and env.use_ew_effects:
+            import time as _time
+            ew_returns = env.get_ew_false_detections(
+                sensor_pos=np.array([0.0, 0.0]),
+                rng=np.random.default_rng(self._rng.randint(0, 2**31)),
+                t=_time.time(),
+                band=band,
+            )
+            for ew_ret in ew_returns:
+                detections.append({
+                    "range_m": ew_ret["range_m"],
+                    "azimuth_deg": ew_ret["azimuth_deg"],
+                    "velocity_mps": ew_ret.get("velocity_mps", 0.0),
+                    "rcs_dbsm": ew_ret.get("rcs_dbsm", 0.0),
+                    "frequency_band": band.value,
+                    "is_ew_generated": True,
+                    "ew_source_id": ew_ret.get("source_id"),
+                })
+
         return detections
 
     def _compute_radial_velocity(

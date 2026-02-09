@@ -1,18 +1,22 @@
-"""Environment modeling: terrain masking, atmospheric propagation, weather, and clutter.
+"""Environment modeling: terrain masking, atmospheric propagation, weather, clutter, and EW.
 
 All effects are optional and default OFF. When disabled, simulators behave
-identically to pre-Phase-12 code (backward compatible).
+identically to previous code (backward compatible).
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 from omegaconf import DictConfig
 
 from sentinel.core.types import RadarBand, ThermalBand
+
+if TYPE_CHECKING:
+    from sentinel.sensors.ew import EWModel
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -427,6 +431,10 @@ class EnvironmentModel:
     use_weather_effects: bool = False
     use_clutter: bool = False
 
+    # Electronic warfare
+    ew: EWModel | None = None
+    use_ew_effects: bool = False
+
     # -- convenience methods ------------------------------------------------
 
     def is_target_visible(
@@ -504,6 +512,48 @@ class EnvironmentModel:
             rain_rate_mm_h=self.weather.rain_rate_mm_h,
         )
 
+    # -- EW delegation methods -----------------------------------------------
+
+    def ew_snr_adjustment_db(
+        self,
+        target_range_m: float,
+        freq_hz: float,
+        band: RadarBand | None = None,
+    ) -> float:
+        """SNR reduction from EW jamming. Returns negative dB (loss)."""
+        if not self.use_ew_effects or self.ew is None:
+            return 0.0
+        return -self.ew.noise_jamming_snr_reduction(target_range_m, freq_hz, band)
+
+    def get_ew_false_detections(
+        self,
+        sensor_pos: np.ndarray,
+        rng: np.random.Generator | None = None,
+        t: float = 0.0,
+        band: RadarBand | None = None,
+    ) -> list[dict]:
+        """All false detections from deceptive jammers + chaff + decoys."""
+        if not self.use_ew_effects or self.ew is None:
+            return []
+        results = self.ew.get_deceptive_false_targets(sensor_pos, rng)
+        if band is not None:
+            results.extend(self.ew.get_chaff_returns(sensor_pos, t, band))
+        else:
+            # Without a specific band, add chaff for X-band as default
+            results.extend(self.ew.get_chaff_returns(sensor_pos, t, RadarBand.X_BAND))
+        results.extend(self.ew.get_decoy_radar_returns(sensor_pos, t))
+        return results
+
+    def get_ew_thermal_returns(
+        self,
+        sensor_pos: np.ndarray,
+        t: float = 0.0,
+    ) -> list[dict]:
+        """Thermal returns from decoys with IR signatures."""
+        if not self.use_ew_effects or self.ew is None:
+            return []
+        return self.ew.get_decoy_thermal_returns(sensor_pos, t)
+
     # -- config loader ------------------------------------------------------
 
     @classmethod
@@ -548,6 +598,13 @@ class EnvironmentModel:
             float(pos_cfg.get("altitude_m", 0.0)),
         )
 
+        # Build EW model
+        ew_cfg = cfg.get("ew", {})
+        ew_model = None
+        if ew_cfg.get("enabled", False):
+            from sentinel.sensors.ew import EWModel
+            ew_model = EWModel.from_omegaconf(ew_cfg)
+
         return cls(
             terrain=terrain,
             weather=weather,
@@ -556,4 +613,6 @@ class EnvironmentModel:
             use_atmospheric_propagation=atmo_cfg.get("enabled", False),
             use_weather_effects=weather_cfg.get("enabled", False),
             use_clutter=clutter_cfg.get("enabled", False),
+            ew=ew_model,
+            use_ew_effects=ew_cfg.get("enabled", False),
         )

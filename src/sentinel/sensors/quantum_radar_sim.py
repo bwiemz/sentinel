@@ -256,6 +256,16 @@ class QuantumRadarSimulator(AbstractSensor):
                 if snr_adj < 0:
                     pd_qi *= max(0.0, 10.0 ** (snr_adj / 20.0))
 
+            # EW noise jamming (QI has inherent resistance via entanglement)
+            if env and env.use_ew_effects:
+                ew_adj = env.ew_snr_adjustment_db(r, self._config.freq_hz)
+                # QI ECCM advantage: entangled photons resist noise jamming
+                if env.ew is not None and env.ew.eccm.quantum_eccm:
+                    qi_eccm_bonus = env.ew.eccm.quantum_eccm_advantage_db
+                    ew_adj = min(0.0, ew_adj + qi_eccm_bonus)
+                if ew_adj < 0:
+                    pd_qi *= max(0.0, 10.0 ** (ew_adj / 20.0))
+
             # Detection roll uses QI probability
             if self._rng.rand() > pd_qi:
                 continue

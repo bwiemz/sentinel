@@ -246,6 +246,26 @@ class ThermalSimulator(AbstractSensor):
 
         # False alarms
         detections.extend(self._generate_false_alarms(band))
+
+        # EW decoy thermal returns (most decoys have no IR → typically empty)
+        env = self._config.environment
+        if env and env.use_ew_effects:
+            import time as _time
+            ew_thermal = env.get_ew_thermal_returns(
+                sensor_pos=np.array([0.0, 0.0]),
+                t=_time.time(),
+            )
+            for ret in ew_thermal:
+                detections.append({
+                    "azimuth_deg": ret["azimuth_deg"],
+                    "elevation_deg": 0.0,
+                    "temperature_k": ret.get("temperature_k", 300.0),
+                    "thermal_band": band.value,
+                    "intensity": 0.5,
+                    "is_ew_generated": True,
+                    "ew_source_id": ret.get("source_id"),
+                })
+
         return detections
 
     def _generate_false_alarms(self, band: ThermalBand) -> list[dict]:
