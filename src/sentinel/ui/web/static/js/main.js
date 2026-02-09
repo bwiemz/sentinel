@@ -8,6 +8,8 @@
   var maxReconnect = 10000;
   var statusEl = document.getElementById("ws-status");
   var timeEl = document.getElementById("header-time");
+  var pendingData = null;
+  var rafScheduled = false;
 
   // Clock
   setInterval(function () {
@@ -33,7 +35,17 @@
       try {
         var data = JSON.parse(event.data);
         if (data.type === "update") {
-          dispatch(data);
+          pendingData = data;
+          if (!rafScheduled) {
+            rafScheduled = true;
+            requestAnimationFrame(function () {
+              rafScheduled = false;
+              if (pendingData) {
+                dispatch(pendingData);
+                pendingData = null;
+              }
+            });
+          }
         }
       } catch (e) {
         console.error("Parse error:", e);

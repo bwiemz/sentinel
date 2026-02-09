@@ -2,6 +2,7 @@
 
 window.SensorPanel = (function () {
   const container = document.getElementById("sensor-body");
+  let lastHtml = "";
 
   const SENSOR_NAMES = {
     camera: "CAMERA",
@@ -34,7 +35,10 @@ window.SensorPanel = (function () {
         "</div></div>";
     }
 
-    container.innerHTML = html;
+    if (html !== lastHtml) {
+      container.innerHTML = html;
+      lastHtml = html;
+    }
   }
 
   return { update: update };

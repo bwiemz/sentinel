@@ -75,7 +75,7 @@ header {
 #dashboard {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: 1fr 140px auto;
   gap: 4px;
   padding: 4px;
   height: calc(100vh - 44px);
@@ -112,6 +112,23 @@ header {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-height: 0;
+  overflow: hidden;
+}
+.right-stack > .panel {
+  min-height: 0;
+}
+#track-table {
+  flex: 1 1 0;
+}
+#track-table .panel-body {
+  overflow-y: scroll;
+}
+#threat-panel {
+  flex: 0 0 160px;
+}
+#threat-panel .panel-body {
+  overflow-y: scroll;
 }
 
 /* Tactical Map */

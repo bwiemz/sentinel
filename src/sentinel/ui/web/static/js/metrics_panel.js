@@ -5,6 +5,8 @@ window.MetricsPanel = (function () {
   const uptimeEl = document.getElementById("uptime-value");
   const countsEl = document.getElementById("track-counts");
   const barsEl = document.getElementById("latency-bars");
+  let lastCountsHtml = "";
+  let lastBarsHtml = "";
 
   const STAGES = [
     { key: "detect_ms", label: "DETECT" },
@@ -41,7 +43,10 @@ window.MetricsPanel = (function () {
     if (status.radar_track_count != null) countsHtml += "RDR: " + status.radar_track_count + "<br>";
     if (status.thermal_track_count != null) countsHtml += "THM: " + status.thermal_track_count + "<br>";
     if (status.fused_track_count != null) countsHtml += "FUS: " + status.fused_track_count;
-    countsEl.innerHTML = countsHtml;
+    if (countsHtml !== lastCountsHtml) {
+      countsEl.innerHTML = countsHtml;
+      lastCountsHtml = countsHtml;
+    }
 
     // Latency bars
     const maxMs = 40; // scale: 40ms = full bar
@@ -58,7 +63,10 @@ window.MetricsPanel = (function () {
         pct + "%;background:" + color + '"></div></div>' +
         '<span class="latency-value">' + val.toFixed(1) + "ms</span></div>";
     }
-    barsEl.innerHTML = barsHtml;
+    if (barsHtml !== lastBarsHtml) {
+      barsEl.innerHTML = barsHtml;
+      lastBarsHtml = barsHtml;
+    }
   }
 
   return { update: update };

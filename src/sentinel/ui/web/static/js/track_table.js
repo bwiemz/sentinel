@@ -1,4 +1,4 @@
-/* SENTINEL Track Table — Sortable */
+/* SENTINEL Track Table — Sortable, incremental DOM updates */
 
 window.TrackTable = (function () {
   const tbody = document.getElementById("tracks-tbody");
@@ -107,23 +107,49 @@ window.TrackTable = (function () {
     return "";
   }
 
-  function render(rows) {
-    const sorted = sortRows(rows);
-    let html = "";
-    for (const r of sorted) {
-      const cls = r._state ? "track-row-" + r._state : "";
-      html += '<tr class="' + cls + '">' +
-        "<td>" + r.id + "</td>" +
-        "<td>" + r.type + "</td>" +
-        "<td>" + r.state + "</td>" +
-        "<td>" + (r.range || "-") + "</td>" +
-        "<td>" + (r.azimuth || "-") + "</td>" +
-        "<td>" + (r.velocity || "-") + "</td>" +
-        "<td>" + r.score + "</td>" +
-        '<td style="color:' + threatColor(r.threat) + '">' + r.threat + "</td>" +
-        "</tr>";
+  var COL_COUNT = 8;
+  var FIELDS = ["id", "type", "state", "range", "azimuth", "velocity", "score", "threat"];
+
+  function ensureRow(index) {
+    if (index < tbody.children.length) return tbody.children[index];
+    var tr = document.createElement("tr");
+    for (var j = 0; j < COL_COUNT; j++) {
+      tr.appendChild(document.createElement("td"));
     }
-    tbody.innerHTML = html;
+    tbody.appendChild(tr);
+    return tr;
+  }
+
+  function render(rows) {
+    var sorted = sortRows(rows);
+
+    for (var i = 0; i < sorted.length; i++) {
+      var r = sorted[i];
+      var tr = ensureRow(i);
+
+      var cls = r._state ? "track-row-" + r._state : "";
+      if (tr.className !== cls) tr.className = cls;
+
+      var cells = tr.children;
+      for (var j = 0; j < FIELDS.length; j++) {
+        var val = r[FIELDS[j]];
+        var text = (val != null && val !== "") ? String(val) : "-";
+        if (j === FIELDS.length - 1) {
+          // threat column — also set color
+          text = val || "";
+          if (cells[j].textContent !== text) cells[j].textContent = text;
+          var tc = threatColor(val);
+          if (cells[j].style.color !== tc) cells[j].style.color = tc;
+        } else {
+          if (cells[j].textContent !== text) cells[j].textContent = text;
+        }
+      }
+    }
+
+    // Remove excess rows
+    while (tbody.children.length > sorted.length) {
+      tbody.removeChild(tbody.lastChild);
+    }
   }
 
   function update(data) {

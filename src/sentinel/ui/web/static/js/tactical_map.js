@@ -110,7 +110,6 @@ window.TacticalMap = (function () {
   }
 
   function update(data) {
-    resize();
     drawBackground();
 
     const w = canvas.width, h = canvas.height;
