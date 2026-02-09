@@ -267,7 +267,7 @@ P_total = 1 - product(1 - P_i)
 | 9 | Association & fusion integrity: JPDA, temporal alignment, statistical distance, NIS monitoring | `636d08b` |
 | 10 | Real-time web dashboard: FastAPI, WebSocket, PPI radar scope, threat cards, MJPEG feed | `86e769c` |
 | 11 | Scenario validation: stealth ingress, hypersonic raid, multi-target swarm, mixed threat | `3287f3c` |
-| 12 | Terrain & environment: terrain masking, atmospheric propagation, weather effects, clutter models | -- |
+| 12 | Terrain & environment: terrain masking, atmospheric propagation, weather effects, clutter models | `c8ba6fd` |
 
 ## Dependencies
 
