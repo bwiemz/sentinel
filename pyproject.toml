@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core>=0.5", "pybind11>=2.11"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "sentinel"
@@ -35,14 +35,21 @@ dev = [
     "pytest-asyncio",
     "httpx",
     "ruff>=0.1",
+    "pybind11>=2.11",
 ]
 all = ["sentinel[web,dev]"]
 
 [project.scripts]
 sentinel = "sentinel.__main__:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.scikit-build]
+cmake.source-dir = "csrc"
+wheel.packages = ["src/sentinel"]
+cmake.build-type = "Release"
+build-dir = "build/{wheel_tag}"
+
+[tool.scikit-build.cmake.define]
+BUILD_TESTS = "OFF"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -14,6 +14,7 @@ import math
 from dataclasses import dataclass, field
 
 from sentinel.core.types import RadarBand, TargetType, ThermalBand
+from sentinel.tracking._accel import _HAS_CPP, _sentinel_core
 
 # RCS offset from X-band baseline in dB, by (band, target_type).
 # Stealth RAM is optimized for X-band; lower frequencies see much larger RCS.
@@ -422,6 +423,11 @@ def radar_snr(
     Returns:
         SNR in dB.
     """
+    if _HAS_CPP:
+        return _sentinel_core.physics.radar_snr(
+            rcs_m2, range_m, ref_range_m, ref_rcs_m2, base_snr_db,
+        )
+
     if range_m <= 0 or rcs_m2 <= 0:
         return -100.0
     ratio_rcs = rcs_m2 / ref_rcs_m2
@@ -435,6 +441,9 @@ def _snr_to_pd(snr_db: float) -> float:
     Pd = 1 - exp(-10^(SNR_dB/10) / threshold_factor)
     Tuned so SNR=13 dB gives Pd ~0.9 (standard radar design point).
     """
+    if _HAS_CPP:
+        return _sentinel_core.physics.snr_to_pd(snr_db)
+
     if snr_db < -50:
         return 0.0
     snr_linear = 10.0 ** (snr_db / 10.0)
@@ -458,6 +467,12 @@ def qi_practical_pd(
     (scaled by receiver efficiency). This preserves the correct QI/classical
     ratio while giving realistic detection rates.
     """
+    if _HAS_CPP:
+        return _sentinel_core.physics.qi_practical_pd(
+            rcs_m2, range_m, n_signal, receiver_eff,
+            ref_range_m, ref_rcs_m2, base_snr_db,
+        )
+
     snr = radar_snr(rcs_m2, range_m, ref_range_m, ref_rcs_m2, base_snr_db)
     # QI boost: 10*log10(4/N_S) * receiver_eff
     qi_boost_db = qi_snr_advantage_db(n_signal) * receiver_eff

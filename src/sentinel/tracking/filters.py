@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from sentinel.tracking._accel import _HAS_CPP, _sentinel_core
+
 
 class KalmanFilter:
     """Standard linear Kalman filter for constant-velocity tracking.
@@ -58,8 +60,12 @@ class KalmanFilter:
 
     def predict(self) -> np.ndarray:
         """Predict next state. Returns predicted state vector."""
-        self.x = self.F @ self.x
-        self.P = self.F @ self.P @ self.F.T + self.Q
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.predict(
+                self.x, self.P, self.F, self.Q)
+        else:
+            self.x = self.F @ self.x
+            self.P = self.F @ self.P @ self.F.T + self.Q
         return self.x.copy()
 
     def update(self, z: np.ndarray) -> np.ndarray:
@@ -68,21 +74,25 @@ class KalmanFilter:
         Args:
             z: Measurement vector [x, y] in pixel coordinates.
         """
-        # Innovation (measurement residual)
-        y = z - self.H @ self.x
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.update(
+                self.x, self.P, self.H, self.R, z)
+        else:
+            # Innovation (measurement residual)
+            y = z - self.H @ self.x
 
-        # Innovation covariance
-        S = self.H @ self.P @ self.H.T + self.R
+            # Innovation covariance
+            S = self.H @ self.P @ self.H.T + self.R
 
-        # Kalman gain
-        K = np.linalg.solve(S.T, (self.P @ self.H.T).T).T
+            # Kalman gain
+            K = np.linalg.solve(S.T, (self.P @ self.H.T).T).T
 
-        # State update
-        self.x = self.x + K @ y
+            # State update
+            self.x = self.x + K @ y
 
-        # Covariance update (Joseph form for numerical stability)
-        I_KH = np.eye(self.dim_state) - K @ self.H
-        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
+            # Covariance update (Joseph form for numerical stability)
+            I_KH = np.eye(self.dim_state) - K @ self.H
+            self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
 
         return self.x.copy()
 
@@ -95,6 +105,9 @@ class KalmanFilter:
 
         A chi-squared threshold of 9.21 (2 DOF, 99% confidence) is typical.
         """
+        if _HAS_CPP:
+            return float(_sentinel_core.kalman.gating_distance(
+                self.x, self.P, self.H, self.R, z))
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
         return float(y.T @ np.linalg.solve(S, y))
@@ -196,8 +209,12 @@ class ExtendedKalmanFilter:
 
     def predict(self) -> np.ndarray:
         """Predict next state (linear dynamics). Returns predicted state."""
-        self.x = self.F @ self.x
-        self.P = self.F @ self.P @ self.F.T + self.Q
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.predict(
+                self.x, self.P, self.F, self.Q)
+        else:
+            self.x = self.F @ self.x
+            self.P = self.F @ self.P @ self.F.T + self.Q
         return self.x.copy()
 
     def update(self, z: np.ndarray) -> np.ndarray:
@@ -206,43 +223,36 @@ class ExtendedKalmanFilter:
         Uses analytical Jacobian and angular wrapping on azimuth residual.
         Joseph-form covariance update for numerical stability.
         """
-        # Linearize: Jacobian at current state
-        H = self.H_jacobian(self.x)
-
-        # Innovation with angular wrapping on azimuth
-        y = z - self.h(self.x)
-        y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi  # normalize azimuth residual
-
-        # Innovation covariance
-        S = H @ self.P @ H.T + self.R
-
-        # Kalman gain
-        K = np.linalg.solve(S.T, (self.P @ H.T).T).T
-
-        # State update
-        self.x = self.x + K @ y
-
-        # Covariance update (Joseph form)
-        I_KH = np.eye(self.dim_state) - K @ H
-        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
+        if _HAS_CPP:
+            h_x = _sentinel_core.ekf.h_polar(self.x)
+            H = _sentinel_core.ekf.H_polar(self.x)
+            self.x, self.P = _sentinel_core.ekf.update(
+                self.x, self.P, self.R, z, h_x, H, [1])
+        else:
+            H = self.H_jacobian(self.x)
+            y = z - self.h(self.x)
+            y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
+            S = H @ self.P @ H.T + self.R
+            K = np.linalg.solve(S.T, (self.P @ H.T).T).T
+            self.x = self.x + K @ y
+            I_KH = np.eye(self.dim_state) - K @ H
+            self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
 
         return self.x.copy()
 
     def h(self, x: np.ndarray) -> np.ndarray:
         """Nonlinear measurement function: state → [range, azimuth]."""
+        if _HAS_CPP:
+            return np.asarray(_sentinel_core.ekf.h_polar(x))
         px, _, py, _ = x
         r = np.sqrt(px * px + py * py)
         az = np.arctan2(py, px)
         return np.array([r, az])
 
     def H_jacobian(self, x: np.ndarray) -> np.ndarray:
-        """Analytical Jacobian of h(x), shape (2, 4).
-
-        dh/dx = [[x/r,   0,  y/r,   0],
-                  [-y/r², 0,  x/r², 0]]
-
-        Guarded against r ≈ 0.
-        """
+        """Analytical Jacobian of h(x), shape (2, 4)."""
+        if _HAS_CPP:
+            return np.asarray(_sentinel_core.ekf.H_polar(x))
         px, _, py, _ = x
         r = max(np.sqrt(px * px + py * py), 1e-6)
         r2 = r * r
@@ -255,10 +265,12 @@ class ExtendedKalmanFilter:
         )
 
     def gating_distance(self, z: np.ndarray) -> float:
-        """Squared Mahalanobis distance in polar measurement space.
-
-        Handles angular wrapping on azimuth residual.
-        """
+        """Squared Mahalanobis distance in polar measurement space."""
+        if _HAS_CPP:
+            h_x = _sentinel_core.ekf.h_polar(self.x)
+            H = _sentinel_core.ekf.H_polar(self.x)
+            return float(_sentinel_core.ekf.gating_distance(
+                self.x, self.P, self.R, z, h_x, H, [1]))
         H = self.H_jacobian(self.x)
         y = z - self.h(self.x)
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
@@ -356,25 +368,37 @@ class BearingOnlyEKF:
         self.R = np.array([[np.radians(0.1) ** 2]])  # 0.1 deg
 
     def predict(self) -> np.ndarray:
-        self.x = self.F @ self.x
-        self.P = self.F @ self.P @ self.F.T + self.Q
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.predict(
+                self.x, self.P, self.F, self.Q)
+        else:
+            self.x = self.F @ self.x
+            self.P = self.F @ self.P @ self.F.T + self.Q
         return self.x.copy()
 
     def update(self, z: np.ndarray) -> np.ndarray:
         """Update with bearing measurement z = [azimuth_rad]."""
-        H = self.H_jacobian(self.x)
-        y = z - self.h(self.x)
-        # Angular wrapping
-        y[0] = (y[0] + np.pi) % (2 * np.pi) - np.pi
-        S = H @ self.P @ H.T + self.R
-        K = np.linalg.solve(S.T, (self.P @ H.T).T).T
-        self.x = self.x + K @ y
-        I_KH = np.eye(self.dim_state) - K @ H
-        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
+        if _HAS_CPP:
+            h_x = np.array([_sentinel_core.ekf.h_bearing(self.x)])
+            H = np.asarray(_sentinel_core.ekf.H_bearing(self.x)).reshape(1, -1)
+            self.x, self.P = _sentinel_core.ekf.update(
+                self.x, self.P, self.R, z, h_x, H, [0])
+        else:
+            H = self.H_jacobian(self.x)
+            y = z - self.h(self.x)
+            # Angular wrapping
+            y[0] = (y[0] + np.pi) % (2 * np.pi) - np.pi
+            S = H @ self.P @ H.T + self.R
+            K = np.linalg.solve(S.T, (self.P @ H.T).T).T
+            self.x = self.x + K @ y
+            I_KH = np.eye(self.dim_state) - K @ H
+            self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
         return self.x.copy()
 
     def h(self, x: np.ndarray) -> np.ndarray:
         """Measurement function: state → [azimuth_rad]."""
+        if _HAS_CPP:
+            return np.array([_sentinel_core.ekf.h_bearing(x)])
         px, _, py, _ = x
         return np.array([np.arctan2(py, px)])
 
@@ -383,12 +407,19 @@ class BearingOnlyEKF:
 
         dh/dx = [[-y/r², 0, x/r², 0]]
         """
+        if _HAS_CPP:
+            return np.asarray(_sentinel_core.ekf.H_bearing(x)).reshape(1, -1)
         px, _, py, _ = x
         r2 = max(px * px + py * py, 1e-6)
         return np.array([[-py / r2, 0.0, px / r2, 0.0]])
 
     def gating_distance(self, z: np.ndarray) -> float:
         """Squared Mahalanobis distance in bearing space."""
+        if _HAS_CPP:
+            h_x = np.array([_sentinel_core.ekf.h_bearing(self.x)])
+            H = np.asarray(_sentinel_core.ekf.H_bearing(self.x)).reshape(1, -1)
+            return float(_sentinel_core.ekf.gating_distance(
+                self.x, self.P, self.R, z, h_x, H, [0]))
         H = self.H_jacobian(self.x)
         y = z - self.h(self.x)
         y[0] = (y[0] + np.pi) % (2 * np.pi) - np.pi
@@ -484,20 +515,31 @@ class ConstantAccelerationKF:
         self.R = np.eye(dim_meas) * 10.0
 
     def predict(self) -> np.ndarray:
-        self.x = self.F @ self.x
-        self.P = self.F @ self.P @ self.F.T + self.Q
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.predict(
+                self.x, self.P, self.F, self.Q)
+        else:
+            self.x = self.F @ self.x
+            self.P = self.F @ self.P @ self.F.T + self.Q
         return self.x.copy()
 
     def update(self, z: np.ndarray) -> np.ndarray:
-        y = z - self.H @ self.x
-        S = self.H @ self.P @ self.H.T + self.R
-        K = np.linalg.solve(S.T, (self.P @ self.H.T).T).T
-        self.x = self.x + K @ y
-        I_KH = np.eye(self.dim_state) - K @ self.H
-        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.update(
+                self.x, self.P, self.H, self.R, z)
+        else:
+            y = z - self.H @ self.x
+            S = self.H @ self.P @ self.H.T + self.R
+            K = np.linalg.solve(S.T, (self.P @ self.H.T).T).T
+            self.x = self.x + K @ y
+            I_KH = np.eye(self.dim_state) - K @ self.H
+            self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
         return self.x.copy()
 
     def gating_distance(self, z: np.ndarray) -> float:
+        if _HAS_CPP:
+            return float(_sentinel_core.kalman.gating_distance(
+                self.x, self.P, self.H, self.R, z))
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
         return float(y.T @ np.linalg.solve(S, y))
@@ -593,23 +635,35 @@ class ConstantAccelerationEKF:
         self.R = np.diag([25.0, np.radians(1.0) ** 2])
 
     def predict(self) -> np.ndarray:
-        self.x = self.F @ self.x
-        self.P = self.F @ self.P @ self.F.T + self.Q
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.predict(
+                self.x, self.P, self.F, self.Q)
+        else:
+            self.x = self.F @ self.x
+            self.P = self.F @ self.P @ self.F.T + self.Q
         return self.x.copy()
 
     def update(self, z: np.ndarray) -> np.ndarray:
-        H = self.H_jacobian(self.x)
-        y = z - self.h(self.x)
-        y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
-        S = H @ self.P @ H.T + self.R
-        K = np.linalg.solve(S.T, (self.P @ H.T).T).T
-        self.x = self.x + K @ y
-        I_KH = np.eye(self.dim_state) - K @ H
-        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
+        if _HAS_CPP:
+            h_x = np.asarray(_sentinel_core.ekf.h_ca_polar(self.x))
+            H = np.asarray(_sentinel_core.ekf.H_ca_polar(self.x))
+            self.x, self.P = _sentinel_core.ekf.update(
+                self.x, self.P, self.R, z, h_x, H, [1])
+        else:
+            H = self.H_jacobian(self.x)
+            y = z - self.h(self.x)
+            y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
+            S = H @ self.P @ H.T + self.R
+            K = np.linalg.solve(S.T, (self.P @ H.T).T).T
+            self.x = self.x + K @ y
+            I_KH = np.eye(self.dim_state) - K @ H
+            self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
         return self.x.copy()
 
     def h(self, x: np.ndarray) -> np.ndarray:
         """Measurement function: [range, azimuth] from state."""
+        if _HAS_CPP:
+            return np.asarray(_sentinel_core.ekf.h_ca_polar(x))
         px, _, _, py, _, _ = x
         r = np.sqrt(px * px + py * py)
         az = np.arctan2(py, px)
@@ -617,6 +671,8 @@ class ConstantAccelerationEKF:
 
     def H_jacobian(self, x: np.ndarray) -> np.ndarray:
         """Jacobian of h(x), shape (2, 6)."""
+        if _HAS_CPP:
+            return np.asarray(_sentinel_core.ekf.H_ca_polar(x))
         px, _, _, py, _, _ = x
         r = max(np.sqrt(px * px + py * py), 1e-6)
         r2 = r * r
@@ -628,6 +684,11 @@ class ConstantAccelerationEKF:
         )
 
     def gating_distance(self, z: np.ndarray) -> float:
+        if _HAS_CPP:
+            h_x = np.asarray(_sentinel_core.ekf.h_ca_polar(self.x))
+            H = np.asarray(_sentinel_core.ekf.H_ca_polar(self.x))
+            return float(_sentinel_core.ekf.gating_distance(
+                self.x, self.P, self.R, z, h_x, H, [1]))
         H = self.H_jacobian(self.x)
         y = z - self.h(self.x)
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
@@ -718,20 +779,31 @@ class KalmanFilter3D:
         self.R = np.eye(3) * 25.0
 
     def predict(self) -> np.ndarray:
-        self.x = self.F @ self.x
-        self.P = self.F @ self.P @ self.F.T + self.Q
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.predict(
+                self.x, self.P, self.F, self.Q)
+        else:
+            self.x = self.F @ self.x
+            self.P = self.F @ self.P @ self.F.T + self.Q
         return self.x.copy()
 
     def update(self, z: np.ndarray) -> np.ndarray:
-        y = z - self.H @ self.x
-        S = self.H @ self.P @ self.H.T + self.R
-        K = np.linalg.solve(S.T, (self.P @ self.H.T).T).T
-        self.x = self.x + K @ y
-        I_KH = np.eye(self.dim_state) - K @ self.H
-        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.update(
+                self.x, self.P, self.H, self.R, z)
+        else:
+            y = z - self.H @ self.x
+            S = self.H @ self.P @ self.H.T + self.R
+            K = np.linalg.solve(S.T, (self.P @ self.H.T).T).T
+            self.x = self.x + K @ y
+            I_KH = np.eye(self.dim_state) - K @ self.H
+            self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
         return self.x.copy()
 
     def gating_distance(self, z: np.ndarray) -> float:
+        if _HAS_CPP:
+            return float(_sentinel_core.kalman.gating_distance(
+                self.x, self.P, self.H, self.R, z))
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
         return float(y.T @ np.linalg.solve(S, y))
@@ -811,25 +883,37 @@ class ExtendedKalmanFilter3D:
         self.R = np.diag([25.0, np.radians(1.0) ** 2, np.radians(1.0) ** 2])
 
     def predict(self) -> np.ndarray:
-        self.x = self.F @ self.x
-        self.P = self.F @ self.P @ self.F.T + self.Q
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.predict(
+                self.x, self.P, self.F, self.Q)
+        else:
+            self.x = self.F @ self.x
+            self.P = self.F @ self.P @ self.F.T + self.Q
         return self.x.copy()
 
     def update(self, z: np.ndarray) -> np.ndarray:
-        H = self.H_jacobian(self.x)
-        y = z - self.h(self.x)
-        # Angular wrapping on azimuth and elevation
-        y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
-        y[2] = (y[2] + np.pi) % (2 * np.pi) - np.pi
-        S = H @ self.P @ H.T + self.R
-        K = np.linalg.solve(S.T, (self.P @ H.T).T).T
-        self.x = self.x + K @ y
-        I_KH = np.eye(self.dim_state) - K @ H
-        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
+        if _HAS_CPP:
+            h_x = np.asarray(_sentinel_core.ekf.h_3d(self.x))
+            H = np.asarray(_sentinel_core.ekf.H_3d(self.x))
+            self.x, self.P = _sentinel_core.ekf.update(
+                self.x, self.P, self.R, z, h_x, H, [1, 2])
+        else:
+            H = self.H_jacobian(self.x)
+            y = z - self.h(self.x)
+            # Angular wrapping on azimuth and elevation
+            y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
+            y[2] = (y[2] + np.pi) % (2 * np.pi) - np.pi
+            S = H @ self.P @ H.T + self.R
+            K = np.linalg.solve(S.T, (self.P @ H.T).T).T
+            self.x = self.x + K @ y
+            I_KH = np.eye(self.dim_state) - K @ H
+            self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
         return self.x.copy()
 
     def h(self, x: np.ndarray) -> np.ndarray:
         """Measurement function: [range, azimuth, elevation]."""
+        if _HAS_CPP:
+            return np.asarray(_sentinel_core.ekf.h_3d(x))
         px, _, py, _, pz, _ = x
         r_xy = np.sqrt(px * px + py * py)
         r = np.sqrt(px * px + py * py + pz * pz)
@@ -844,6 +928,8 @@ class ExtendedKalmanFilter3D:
         Row 1: d(azimuth)/d(state)
         Row 2: d(elevation)/d(state)
         """
+        if _HAS_CPP:
+            return np.asarray(_sentinel_core.ekf.H_3d(x))
         px, _, py, _, pz, _ = x
         r_xy_sq = max(px * px + py * py, 1e-12)
         r_xy = np.sqrt(r_xy_sq)
@@ -873,6 +959,11 @@ class ExtendedKalmanFilter3D:
         return H
 
     def gating_distance(self, z: np.ndarray) -> float:
+        if _HAS_CPP:
+            h_x = np.asarray(_sentinel_core.ekf.h_3d(self.x))
+            H = np.asarray(_sentinel_core.ekf.H_3d(self.x))
+            return float(_sentinel_core.ekf.gating_distance(
+                self.x, self.P, self.R, z, h_x, H, [1, 2]))
         H = self.H_jacobian(self.x)
         y = z - self.h(self.x)
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
@@ -972,25 +1063,37 @@ class ExtendedKalmanFilterWithDoppler:
         self.R = np.diag([25.0, np.radians(1.0) ** 2, 0.25])  # 5m, 1deg, 0.5m/s
 
     def predict(self) -> np.ndarray:
-        self.x = self.F @ self.x
-        self.P = self.F @ self.P @ self.F.T + self.Q
+        if _HAS_CPP:
+            self.x, self.P = _sentinel_core.kalman.predict(
+                self.x, self.P, self.F, self.Q)
+        else:
+            self.x = self.F @ self.x
+            self.P = self.F @ self.P @ self.F.T + self.Q
         return self.x.copy()
 
     def update(self, z: np.ndarray) -> np.ndarray:
         """Update with measurement z = [range, azimuth_rad, radial_vel_mps]."""
-        H = self.H_jacobian(self.x)
-        y = z - self.h(self.x)
-        # Angular wrapping on azimuth
-        y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
-        S = H @ self.P @ H.T + self.R
-        K = np.linalg.solve(S.T, (self.P @ H.T).T).T
-        self.x = self.x + K @ y
-        I_KH = np.eye(self.dim_state) - K @ H
-        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
+        if _HAS_CPP:
+            h_x = np.asarray(_sentinel_core.ekf.h_doppler(self.x))
+            H = np.asarray(_sentinel_core.ekf.H_doppler(self.x))
+            self.x, self.P = _sentinel_core.ekf.update(
+                self.x, self.P, self.R, z, h_x, H, [1])
+        else:
+            H = self.H_jacobian(self.x)
+            y = z - self.h(self.x)
+            # Angular wrapping on azimuth
+            y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi
+            S = H @ self.P @ H.T + self.R
+            K = np.linalg.solve(S.T, (self.P @ H.T).T).T
+            self.x = self.x + K @ y
+            I_KH = np.eye(self.dim_state) - K @ H
+            self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
         return self.x.copy()
 
     def h(self, x: np.ndarray) -> np.ndarray:
         """Measurement function: [range, azimuth, radial_velocity]."""
+        if _HAS_CPP:
+            return np.asarray(_sentinel_core.ekf.h_doppler(x))
         px, vx, py, vy = x
         r = max(np.sqrt(px * px + py * py), 1e-6)
         az = np.arctan2(py, px)
@@ -1008,6 +1111,8 @@ class ExtendedKalmanFilterWithDoppler:
             dv_r/dpy = vy/r - py*(px*vx + py*vy)/r³
             dv_r/dvy = py/r
         """
+        if _HAS_CPP:
+            return np.asarray(_sentinel_core.ekf.H_doppler(x))
         px, vx, py, vy = x
         r = max(np.sqrt(px * px + py * py), 1e-6)
         r2 = r * r
@@ -1029,6 +1134,11 @@ class ExtendedKalmanFilterWithDoppler:
         return H
 
     def gating_distance(self, z: np.ndarray) -> float:
+        if _HAS_CPP:
+            h_x = np.asarray(_sentinel_core.ekf.h_doppler(self.x))
+            H = np.asarray(_sentinel_core.ekf.H_doppler(self.x))
+            return float(_sentinel_core.ekf.gating_distance(
+                self.x, self.P, self.R, z, h_x, H, [1]))
         H = self.H_jacobian(self.x)
         y = z - self.h(self.x)
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi

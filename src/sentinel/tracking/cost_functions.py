@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from sentinel.tracking._accel import _HAS_CPP, _sentinel_core
 from sentinel.tracking.filters import KalmanFilter
 
 
@@ -12,6 +13,12 @@ def iou_bbox(bbox_a: np.ndarray, bbox_b: np.ndarray) -> float:
 
     Returns IoU in [0, 1].
     """
+    if _HAS_CPP:
+        return _sentinel_core.cost.iou_bbox(
+            np.asarray(bbox_a, dtype=np.float64),
+            np.asarray(bbox_b, dtype=np.float64),
+        )
+
     x1 = max(bbox_a[0], bbox_b[0])
     y1 = max(bbox_a[1], bbox_b[1])
     x2 = min(bbox_a[2], bbox_b[2])
@@ -66,6 +73,14 @@ def track_to_track_mahalanobis(
         Squared Mahalanobis distance (non-negative scalar).
         Returns inf if the combined covariance is singular.
     """
+    if _HAS_CPP:
+        return _sentinel_core.cost.track_to_track_mahalanobis(
+            np.asarray(pos1, dtype=float),
+            np.asarray(cov1, dtype=float),
+            np.asarray(pos2, dtype=float),
+            np.asarray(cov2, dtype=float),
+        )
+
     dx = np.asarray(pos1, dtype=float) - np.asarray(pos2, dtype=float)
     S = np.asarray(cov1, dtype=float) + np.asarray(cov2, dtype=float)
     try:

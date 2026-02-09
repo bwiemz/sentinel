@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from sentinel.core.types import Detection, TrackState
+from sentinel.tracking._accel import _HAS_CPP, _sentinel_core
 from sentinel.tracking.association import AssociationResult
 from sentinel.tracking.cost_functions import iou_bbox
 
@@ -57,6 +58,9 @@ def _gaussian_likelihood(innovation: np.ndarray, S: np.ndarray) -> float:
     Returns:
         Likelihood value (non-negative). Returns 0.0 for singular S.
     """
+    if _HAS_CPP:
+        return _sentinel_core.jpda.gaussian_likelihood(innovation, S)
+
     d = len(innovation)
     try:
         sign, logdet = np.linalg.slogdet(S)
@@ -88,6 +92,12 @@ def _compute_beta_coefficients(
     n = len(likelihoods)
     if n == 0:
         return np.array([]), 1.0
+
+    if _HAS_CPP:
+        betas_vec, beta_0 = _sentinel_core.jpda.compute_beta_coefficients(
+            np.asarray(likelihoods), P_D, lam,
+        )
+        return betas_vec, beta_0
 
     miss_term = lam * (1.0 - P_D)
     det_terms = likelihoods * P_D
