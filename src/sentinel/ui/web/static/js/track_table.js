@@ -48,7 +48,7 @@ window.TrackTable = (function () {
         state: t.state || "",
         range: t.range_m != null ? (t.range_m / 1000).toFixed(1) : "",
         azimuth: t.azimuth_deg != null ? t.azimuth_deg.toFixed(1) : "",
-        velocity: t.velocity_mps ? Math.sqrt(t.velocity_mps[0] ** 2 + t.velocity_mps[1] ** 2).toFixed(0) : "",
+        velocity: t.velocity_mps != null ? (typeof t.velocity_mps === "number" ? t.velocity_mps.toFixed(0) : Math.sqrt(t.velocity_mps[0] ** 2 + t.velocity_mps[1] ** 2).toFixed(0)) : "",
         score: t.score != null ? t.score.toFixed(2) : "",
         threat: "",
         _state: t.state,

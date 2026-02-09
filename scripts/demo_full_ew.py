@@ -343,6 +343,8 @@ def _snapshot_from_state(
     radar_mgr, thermal_mgr, quantum_mgr,
     fused: list[EnhancedFusedTrack],
     step: int, elapsed: float,
+    detect_ms: float = 0.0, track_ms: float = 0.0,
+    fusion_ms: float = 0.0,
 ) -> "StateSnapshot":
     from sentinel.ui.web.state_buffer import StateSnapshot
 
@@ -398,11 +400,11 @@ def _snapshot_from_state(
             "multifreq_radar": {"enabled": True, "error_count": 0},
             "fusion": {"enabled": True, "error_count": 0},
         },
-        "detect_ms": 0.0,
-        "track_ms": 0.0,
-        "radar_ms": 0.0,
-        "fusion_ms": 0.0,
-        "render_ms": 0.0,
+        "detect_ms": round(detect_ms, 1),
+        "track_ms": round(track_ms, 1),
+        "radar_ms": round(detect_ms + track_ms, 1),
+        "fusion_ms": round(fusion_ms, 1),
+        "render_ms": 0.1,
         "threat_counts": threat_counts,
     }
 
@@ -517,25 +519,33 @@ def main() -> None:
             step += 1
             elapsed = time.monotonic() - t0
 
-            # --- Multi-freq radar ---
+            # --- Detection phase (timed) ---
+            t_detect_start = time.perf_counter()
+
             mf_frame = mf_sim.read_frame()
             mf_dets = multifreq_radar_frame_to_detections(mf_frame)
-            radar_mgr.step(mf_dets)
 
-            # --- Thermal ---
             th_frame = th_sim.read_frame()
             th_dets = thermal_frame_to_detections(th_frame)
-            thermal_mgr.step(th_dets)
 
-            # --- Quantum radar ---
             qi_frame = qi_sim.read_frame()
             qi_dets = quantum_radar_frame_to_detections(qi_frame)
+
+            detect_ms = (time.perf_counter() - t_detect_start) * 1000.0
+
+            # --- Tracking phase (timed) ---
+            t_track_start = time.perf_counter()
+
+            radar_mgr.step(mf_dets)
+            thermal_mgr.step(th_dets)
             quantum_mgr.step(qi_dets)
 
-            # --- Correlation ---
-            correlated, _ = correlator.correlate(mf_dets)
+            track_ms = (time.perf_counter() - t_track_start) * 1000.0
 
-            # --- Fusion ---
+            # --- Correlation + Fusion (timed) ---
+            t_fusion_start = time.perf_counter()
+
+            correlated, _ = correlator.correlate(mf_dets)
             fused = fusion.fuse(
                 camera_tracks=[],
                 radar_tracks=radar_mgr.confirmed_tracks,
@@ -543,6 +553,8 @@ def main() -> None:
                 correlated_detections=correlated or None,
                 quantum_radar_tracks=quantum_mgr.confirmed_tracks,
             )
+
+            fusion_ms = (time.perf_counter() - t_fusion_start) * 1000.0
 
             # --- Console output ---
             _print_step(
@@ -557,6 +569,9 @@ def main() -> None:
                 snapshot = _snapshot_from_state(
                     radar_mgr, thermal_mgr, quantum_mgr,
                     fused, step, elapsed,
+                    detect_ms=detect_ms,
+                    track_ms=track_ms,
+                    fusion_ms=fusion_ms,
                 )
                 buf.update(snapshot)
 

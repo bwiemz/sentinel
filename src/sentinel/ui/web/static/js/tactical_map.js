@@ -1,4 +1,4 @@
-/* SENTINEL Tactical Map — PPI Radar Scope */
+/* SENTINEL Tactical Map — PPI Radar Scope with interpolation */
 
 window.TacticalMap = (function () {
   const canvas = document.getElementById("ppi-canvas");
@@ -27,6 +27,35 @@ window.TacticalMap = (function () {
     canvas.height = rect.height;
   }
 
+  // ---------------------------------------------------------------
+  // Interpolation helpers
+  // ---------------------------------------------------------------
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function lerpAngle(a, b, t) {
+    // Shortest-arc interpolation for degrees (-180 to 180)
+    var diff = b - a;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+    return a + diff * t;
+  }
+
+  // Build lookup by track_id from a track array
+  function buildLookup(arr) {
+    var map = {};
+    if (!arr) return map;
+    for (var i = 0; i < arr.length; i++) {
+      var key = arr[i].track_id || arr[i].fused_id;
+      if (key) map[key] = arr[i];
+    }
+    return map;
+  }
+
+  // ---------------------------------------------------------------
+  // Drawing
+  // ---------------------------------------------------------------
   function drawBackground() {
     const w = canvas.width, h = canvas.height;
     const cx = w / 2, cy = h / 2;
@@ -45,7 +74,6 @@ window.TacticalMap = (function () {
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.stroke();
-      // Range label
       ctx.fillStyle = COLORS.ring_text;
       ctx.font = "9px Consolas, monospace";
       ctx.fillText((maxRange * pct).toFixed(0) + "km", cx + 4, cy - r + 10);
@@ -82,6 +110,8 @@ window.TacticalMap = (function () {
     let color = COLORS[state] || COLORS.confirmed;
     if (threat === "CRITICAL") color = COLORS.critical;
     else if (threat === "HIGH") color = COLORS.high;
+    else if (threat === "MEDIUM") color = COLORS.medium;
+    else if (threat === "LOW") color = COLORS.low;
 
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
@@ -109,7 +139,10 @@ window.TacticalMap = (function () {
     }
   }
 
-  function update(data) {
+  // ---------------------------------------------------------------
+  // Main update — called at full frame rate with interpolation
+  // ---------------------------------------------------------------
+  function update(data, prevData, t) {
     drawBackground();
 
     const w = canvas.width, h = canvas.height;
@@ -117,26 +150,54 @@ window.TacticalMap = (function () {
     const radius = Math.min(cx, cy) - 10;
 
     const tracks = data.tracks || {};
+    var prevTracks = (prevData && prevData.tracks) ? prevData.tracks : {};
 
-    // Radar tracks
-    (tracks.radar || []).forEach(function (t) {
-      plotTrack(cx, cy, radius, t.range_m, t.azimuth_deg, "radar", t.state, null);
+    // Build prev lookups for interpolation
+    var prevRadar = buildLookup(prevTracks.radar);
+    var prevThermal = buildLookup(prevTracks.thermal);
+    var prevFused = buildLookup(prevTracks.enhanced_fused);
+
+    // Radar tracks — interpolated
+    (tracks.radar || []).forEach(function (tr) {
+      var key = tr.track_id;
+      var prev = prevRadar[key];
+      var range_m = tr.range_m;
+      var az = tr.azimuth_deg;
+      if (prev && prev.range_m != null && prev.azimuth_deg != null) {
+        range_m = lerp(prev.range_m, tr.range_m, t);
+        az = lerpAngle(prev.azimuth_deg, tr.azimuth_deg, t);
+      }
+      plotTrack(cx, cy, radius, range_m, az, "radar", tr.state, null);
     });
 
-    // Thermal tracks
-    (tracks.thermal || []).forEach(function (t) {
-      const range_m = t.range_m || (t.position ? Math.sqrt(t.position[0] ** 2 + t.position[1] ** 2) : null);
-      plotTrack(cx, cy, radius, range_m, t.azimuth_deg, "thermal", t.state, null);
+    // Thermal tracks — interpolated azimuth
+    (tracks.thermal || []).forEach(function (tr) {
+      var key = tr.track_id;
+      var prev = prevThermal[key];
+      var range_m = tr.range_m || (tr.position ? Math.sqrt(tr.position[0] ** 2 + tr.position[1] ** 2) : null);
+      var az = tr.azimuth_deg;
+      if (prev && prev.azimuth_deg != null && az != null) {
+        az = lerpAngle(prev.azimuth_deg, tr.azimuth_deg, t);
+      }
+      plotTrack(cx, cy, radius, range_m, az, "thermal", tr.state, null);
     });
 
-    // Enhanced fused tracks
-    (tracks.enhanced_fused || []).forEach(function (t) {
-      plotTrack(cx, cy, radius, t.range_m, t.azimuth_deg, "enhanced_fused", null, t.threat_level);
+    // Enhanced fused tracks — interpolated
+    (tracks.enhanced_fused || []).forEach(function (tr) {
+      var key = tr.fused_id;
+      var prev = prevFused[key];
+      var range_m = tr.range_m;
+      var az = tr.azimuth_deg;
+      if (prev && prev.range_m != null && prev.azimuth_deg != null) {
+        range_m = lerp(prev.range_m, tr.range_m, t);
+        az = lerpAngle(prev.azimuth_deg, tr.azimuth_deg, t);
+      }
+      plotTrack(cx, cy, radius, range_m, az, "enhanced_fused", null, tr.threat_level);
     });
 
-    // Fused tracks
-    (tracks.fused || []).forEach(function (t) {
-      plotTrack(cx, cy, radius, t.range_m, t.azimuth_deg, "fused", null, null);
+    // Plain fused tracks
+    (tracks.fused || []).forEach(function (tr) {
+      plotTrack(cx, cy, radius, tr.range_m, tr.azimuth_deg, "fused", null, null);
     });
   }
 

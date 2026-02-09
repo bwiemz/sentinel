@@ -29,9 +29,9 @@ window.MetricsPanel = (function () {
   }
 
   function update(status) {
-    // FPS
+    // FPS — this is now the actual render FPS (measured client-side)
     const fps = status.fps;
-    fpsEl.textContent = fps != null ? fps.toFixed(1) : "--";
+    fpsEl.textContent = fps != null ? String(fps) : "--";
     fpsEl.style.color = fps != null && fps < 15 ? "var(--color-danger)" : "var(--color-primary)";
 
     // Uptime
