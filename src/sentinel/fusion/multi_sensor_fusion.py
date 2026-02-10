@@ -93,9 +93,12 @@ class EnhancedFusedTrack(FusedTrack):
                 "intent_confidence": self.intent_confidence,
                 "radar_bands": self.radar_bands_detected,
                 "thermal_bands": self.thermal_bands_detected,
+                "threat_probabilities": self.threat_probabilities,
                 "iff_identification": self.iff_identification,
                 "iff_confidence": self.iff_confidence,
                 "iff_mode_3a_code": self.iff_mode_3a_code,
+                "iff_mode_s_address": self.iff_mode_s_address,
+                "iff_last_auth_mode": self.iff_last_auth_mode,
                 "iff_spoof_suspect": self.iff_spoof_suspect,
                 "engagement_auth": self.engagement_auth,
             }

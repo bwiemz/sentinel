@@ -42,7 +42,25 @@ window.MetricsPanel = (function () {
     if (status.track_count != null) countsHtml += "CAM: " + (status.confirmed_count || 0) + "/" + status.track_count + "<br>";
     if (status.radar_track_count != null) countsHtml += "RDR: " + status.radar_track_count + "<br>";
     if (status.thermal_track_count != null) countsHtml += "THM: " + status.thermal_track_count + "<br>";
-    if (status.fused_track_count != null) countsHtml += "FUS: " + status.fused_track_count;
+    if (status.fused_track_count != null) countsHtml += "FUS: " + status.fused_track_count + "<br>";
+    // System info (Phase 14-20)
+    if (status.clock_mode) {
+      countsHtml += "CLK: " + status.clock_mode.toUpperCase();
+      if (status.sim_time != null) countsHtml += " T=" + status.sim_time.toFixed(1);
+      countsHtml += "<br>";
+    }
+    if (status.cpp_accel) {
+      var accelParts = [];
+      if (status.cpp_accel.core) accelParts.push("C++");
+      if (status.cpp_accel.batch) accelParts.push("BATCH");
+      countsHtml += "ACCEL: " + (accelParts.length > 0 ? accelParts.join("+") : "PY") + "<br>";
+    }
+    var featureFlags = [];
+    if (status.iff_enabled) featureFlags.push("IFF");
+    if (status.roe_enabled) featureFlags.push("ROE");
+    if (status.ew_enabled) featureFlags.push("EW");
+    if (status.network_enabled) featureFlags.push("NET:" + (status.network_node_id || "LOCAL"));
+    if (featureFlags.length > 0) countsHtml += featureFlags.join(" | ");
     if (countsHtml !== lastCountsHtml) {
       countsEl.innerHTML = countsHtml;
       lastCountsHtml = countsHtml;

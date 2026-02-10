@@ -181,6 +181,11 @@ class SentinelPipeline:
         if self._quantum_radar_enabled:
             self._init_quantum_radar(config)
 
+        # --- IFF / ROE defaults (Phase 19) ---
+        self._iff_interrogator = None
+        self._roe_engine = None
+        self._controlled_airspace = False
+
         # --- Multi-Sensor Fusion (Phase 5+6) ---
         self._multi_sensor_fusion = None
         self._latest_enhanced_fused: list = []
@@ -351,6 +356,37 @@ class SentinelPipeline:
         fusion_cfg = config.sentinel.get("fusion", {})
         cam_cfg = config.sentinel.sensors.camera
         threat_cfg = fusion_cfg.get("threat_classification", {})
+
+        # IFF interrogator (Phase 19)
+        iff_interrogator = None
+        iff_cfg = config.sentinel.get("iff", {})
+        if iff_cfg.get("enabled", False):
+            try:
+                from sentinel.sensors.iff import IFFConfig, IFFInterrogator
+
+                iff_config = IFFConfig.from_omegaconf(iff_cfg)
+                iff_interrogator = IFFInterrogator(iff_config)
+                logger.info("IFF interrogator enabled (modes: %s)", iff_cfg.get("modes", []))
+            except Exception:
+                logger.warning("IFF interrogator init failed, continuing without IFF")
+
+        # ROE engine (Phase 19)
+        roe_engine = None
+        roe_cfg = config.sentinel.get("roe", {})
+        if roe_cfg.get("enabled", False):
+            try:
+                from sentinel.classification.roe import ROEConfig, ROEEngine
+
+                roe_config = ROEConfig.from_omegaconf(roe_cfg)
+                roe_engine = ROEEngine(roe_config)
+                logger.info("ROE engine enabled (default posture: %s)", roe_cfg.get("default_posture", "weapons_hold"))
+            except Exception:
+                logger.warning("ROE engine init failed, continuing without ROE")
+
+        self._iff_interrogator = iff_interrogator
+        self._roe_engine = roe_engine
+        self._controlled_airspace = iff_cfg.get("controlled_airspace", False)
+
         self._multi_sensor_fusion = MultiSensorFusion(
             camera_hfov_deg=fusion_cfg.get("camera_hfov_deg", 60.0),
             image_width_px=cam_cfg.get("width", 1280),
@@ -366,6 +402,9 @@ class SentinelPipeline:
             threat_model_path=threat_cfg.get("model_path", None),
             threat_confidence_threshold=threat_cfg.get("confidence_threshold", 0.6),
             intent_estimation_enabled=threat_cfg.get("intent_estimation", False),
+            iff_interrogator=iff_interrogator,
+            roe_engine=roe_engine,
+            controlled_airspace=self._controlled_airspace,
         )
 
         logger.info("Multi-sensor fusion initialized (camera + radar + thermal)")
@@ -774,6 +813,39 @@ class SentinelPipeline:
                 lvl = getattr(eft, "threat_level", "UNKNOWN")
                 threat_counts[lvl] = threat_counts.get(lvl, 0) + 1
             status["threat_counts"] = threat_counts
+
+        # Clock mode
+        from sentinel.core.clock import SimClock
+
+        status["clock_mode"] = "simulated" if isinstance(self._clock, SimClock) else "realtime"
+        status["sim_time"] = self._clock.now() if isinstance(self._clock, SimClock) else None
+
+        # C++ acceleration
+        try:
+            from sentinel.tracking._accel import has_cpp_acceleration, has_cpp_batch
+
+            status["cpp_accel"] = {
+                "core": has_cpp_acceleration(),
+                "batch": has_cpp_batch(),
+            }
+        except ImportError:
+            status["cpp_accel"] = {"core": False, "batch": False}
+
+        # IFF/ROE status
+        status["iff_enabled"] = self._iff_interrogator is not None
+        status["roe_enabled"] = self._roe_engine is not None
+
+        # Network status (Phase 20)
+        net_cfg = self._config.sentinel.get("network", {})
+        status["network_enabled"] = net_cfg.get("enabled", False)
+        if status["network_enabled"]:
+            status["network_node_id"] = net_cfg.get("node_id", "LOCAL")
+            status["network_role"] = net_cfg.get("role", "sensor")
+
+        # EW status (Phase 13)
+        ew_cfg = self._config.sentinel.get("environment", {}).get("ew", {})
+        status["ew_enabled"] = ew_cfg.get("enabled", False)
+
         return status
 
     def get_track_snapshot(self) -> list[Track]:

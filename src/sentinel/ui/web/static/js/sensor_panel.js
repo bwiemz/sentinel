@@ -35,6 +35,24 @@ window.SensorPanel = (function () {
         "</div></div>";
     }
 
+    // Network subsystem (Phase 20)
+    if (status.network_enabled) {
+      html +=
+        '<div class="sensor-card">' +
+        '<div class="sensor-dot online"></div>' +
+        '<div class="sensor-name">MESH NET</div>' +
+        '<div class="sensor-errors">' + (status.network_role || "sensor").toUpperCase() + "</div></div>";
+    }
+
+    // EW subsystem (Phase 13)
+    if (status.ew_enabled) {
+      html +=
+        '<div class="sensor-card">' +
+        '<div class="sensor-dot online"></div>' +
+        '<div class="sensor-name">EW/ECCM</div>' +
+        '<div class="sensor-errors">ACTIVE</div></div>';
+    }
+
     if (html !== lastHtml) {
       container.innerHTML = html;
       lastHtml = html;
