@@ -150,6 +150,45 @@ class TerrainGrid:
             + e11 * dx * dy
         )
 
+    def elevation_at_batch(self, xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+        """Vectorized bilinear-interpolated elevation for arrays of (x, y).
+
+        Returns 0.0 for points outside the grid.
+        """
+        fi = (xs - self.origin_x_m) / self.resolution_m
+        fj = (ys - self.origin_y_m) / self.resolution_m
+        ny, nx = self.elevation_data.shape
+
+        # Out-of-bounds mask
+        valid = (fi >= 0) & (fi < nx - 1) & (fj >= 0) & (fj < ny - 1)
+        result = np.zeros_like(fi, dtype=float)
+
+        if not np.any(valid):
+            return result
+
+        fi_v = fi[valid]
+        fj_v = fj[valid]
+        i0 = fi_v.astype(int)
+        j0 = fj_v.astype(int)
+        dx = fi_v - i0
+        dy = fj_v - j0
+
+        i1 = np.minimum(i0 + 1, nx - 1)
+        j1 = np.minimum(j0 + 1, ny - 1)
+
+        e00 = self.elevation_data[j0, i0]
+        e10 = self.elevation_data[j0, i1]
+        e01 = self.elevation_data[j1, i0]
+        e11 = self.elevation_data[j1, i1]
+
+        result[valid] = (
+            e00 * (1 - dx) * (1 - dy)
+            + e10 * dx * (1 - dy)
+            + e01 * (1 - dx) * dy
+            + e11 * dx * dy
+        )
+        return result
+
 
 def line_of_sight(
     terrain: TerrainGrid,
@@ -163,19 +202,22 @@ def line_of_sight(
     samples *n_samples* points along the straight line and checks whether
     the terrain elevation at each point exceeds the ray height.
 
+    Uses vectorized NumPy sampling with batch terrain lookup for speed.
+
     Returns ``True`` if LoS is clear, ``False`` if blocked.
     """
     sx, sy, sz = sensor_pos
     tx, ty, tz = target_pos
-    for i in range(1, n_samples):
-        frac = i / n_samples
-        px = sx + frac * (tx - sx)
-        py = sy + frac * (ty - sy)
-        ray_z = sz + frac * (tz - sz)
-        terrain_z = terrain.elevation_at(px, py)
-        if terrain_z > ray_z:
-            return False
-    return True
+
+    # Vectorized: compute all sample fractions and positions at once
+    fracs = np.linspace(1 / n_samples, 1.0 - 1 / n_samples, n_samples - 1)
+    px = sx + fracs * (tx - sx)
+    py = sy + fracs * (ty - sy)
+    ray_z = sz + fracs * (tz - sz)
+
+    # Batch terrain elevation lookup (vectorized grid interpolation)
+    terrain_z = terrain.elevation_at_batch(px, py)
+    return bool(np.all(terrain_z <= ray_z))
 
 
 # ===================================================================

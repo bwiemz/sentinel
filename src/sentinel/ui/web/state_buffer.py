@@ -61,7 +61,7 @@ class StateBuffer:
         event so the next call blocks again.
         """
         if self._frame_event.wait(timeout=timeout):
-            self._frame_event.clear()
             with self._lock:
+                self._frame_event.clear()
                 return self._snapshot.hud_frame_jpeg
         return None

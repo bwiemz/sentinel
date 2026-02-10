@@ -6,6 +6,7 @@ and automatic reconnection for the tactical mesh network.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 
 from sentinel.core.types import MessageType, NodeState
@@ -52,7 +53,7 @@ class MeshDiscovery:
         self._transport = transport
         self._auto_discover = auto_discover
         self._heartbeat_timeout_s = heartbeat_timeout_s
-        self._event_log: list[DiscoveryEvent] = []
+        self._event_log: deque[DiscoveryEvent] = deque(maxlen=1000)
         self._known_nodes: set[str] = set()
 
     @property

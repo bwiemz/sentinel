@@ -113,7 +113,7 @@ class ROEEngine:
             iff = IFFCode.UNKNOWN
         elif isinstance(iff_identification, str):
             try:
-                iff = IFFCode(iff_identification)
+                iff = IFFCode(iff_identification.lower())
             except ValueError:
                 iff = IFFCode.UNKNOWN
         else:
@@ -133,7 +133,7 @@ class ROEEngine:
 
         # Priority 3-4: Hostile
         if is_hostile:
-            if intent == "attack":
+            if intent.lower() == "attack":
                 return cfg.hostile_attack_posture
             return cfg.hostile_no_attack_posture
 

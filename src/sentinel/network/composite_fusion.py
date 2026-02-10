@@ -155,16 +155,19 @@ class CompositeFusion:
         n_remote = len(remote_tracks)
         cost = np.full((n_local, n_remote), self._distance_gate * 10)
 
+        # Pre-extract remote positions/covariances once (avoid N*M extractions)
+        remote_data = [
+            (rt.position, self._get_remote_covariance(rt, rt.position))
+            for rt in remote_tracks
+        ]
+
         for i, lt in enumerate(local_tracks):
             pos_local = self._get_position(lt)
-            cov_local = self._get_covariance(lt, pos_local)
             if pos_local is None:
                 continue
+            cov_local = self._get_covariance(lt, pos_local)
 
-            for j, rt in enumerate(remote_tracks):
-                pos_remote = rt.position
-                cov_remote = self._get_remote_covariance(rt, pos_remote)
-                # Ensure dimension match
+            for j, (pos_remote, cov_remote) in enumerate(remote_data):
                 dim = min(len(pos_local), len(pos_remote))
                 p1 = pos_local[:dim]
                 p2 = pos_remote[:dim]
@@ -190,7 +193,14 @@ class CompositeFusion:
         # Weighted position average (higher confidence gets more weight)
         local_conf = getattr(local_track, "confidence", 0.5) or 0.5
         remote_conf = remote.confidence or 0.5
+        # Guard against NaN/Inf confidence values
+        if not np.isfinite(local_conf):
+            local_conf = 0.5
+        if not np.isfinite(remote_conf):
+            remote_conf = 0.5
         total = local_conf + remote_conf
+        if total <= 0:
+            total = 1.0
         local_weight = local_conf / total
         remote_weight = remote_conf / total
 

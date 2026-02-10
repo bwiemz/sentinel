@@ -47,8 +47,11 @@ def covariance_intersection(
         (x_fused, P_fused): Fused state and covariance.
         Guarantees P_fused <= P1 and P_fused <= P2 (in PSD sense).
     """
-    omega = _optimize_omega(P1, P2)
-    return _ci_with_omega(x1, P1, x2, P2, omega)
+    # Pre-compute inverses once (used by both optimize and fuse)
+    P1_inv = _spd_inv(P1)
+    P2_inv = _spd_inv(P2)
+    omega = _optimize_omega_cached(P1_inv, P2_inv)
+    return _ci_with_omega_cached(x1, P1_inv, x2, P2_inv, omega)
 
 
 def _ci_with_omega(
@@ -58,24 +61,35 @@ def _ci_with_omega(
     P2: np.ndarray,
     omega: float,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Apply CI with a given omega."""
+    """Apply CI with a given omega (public API, computes inverses)."""
     P1_inv = _spd_inv(P1)
     P2_inv = _spd_inv(P2)
+    return _ci_with_omega_cached(x1, P1_inv, x2, P2_inv, omega)
 
+
+def _ci_with_omega_cached(
+    x1: np.ndarray,
+    P1_inv: np.ndarray,
+    x2: np.ndarray,
+    P2_inv: np.ndarray,
+    omega: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Apply CI with pre-computed inverses."""
     P_fused_inv = omega * P1_inv + (1 - omega) * P2_inv
     P_fused = _spd_inv(P_fused_inv)
-
     x_fused = P_fused @ (omega * P1_inv @ x1 + (1 - omega) * P2_inv @ x2)
     return x_fused, P_fused
 
 
 def _optimize_omega(P1: np.ndarray, P2: np.ndarray) -> float:
-    """Find omega in [0, 1] that minimizes trace(P_fused).
-
-    Uses scalar optimization since omega is 1D.
-    """
+    """Find omega in [0, 1] that minimizes trace(P_fused)."""
     P1_inv = _spd_inv(P1)
     P2_inv = _spd_inv(P2)
+    return _optimize_omega_cached(P1_inv, P2_inv)
+
+
+def _optimize_omega_cached(P1_inv: np.ndarray, P2_inv: np.ndarray) -> float:
+    """Find omega in [0, 1] with pre-computed inverses."""
 
     def objective(omega: float) -> float:
         P_fused_inv = omega * P1_inv + (1 - omega) * P2_inv

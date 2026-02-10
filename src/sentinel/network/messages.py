@@ -147,8 +147,13 @@ class NetworkMessage:
 
     @property
     def size_bytes(self) -> int:
-        """Approximate serialized size."""
-        return len(self.serialize())
+        """Approximate serialized size (cached after first call)."""
+        cached = getattr(self, '_cached_size', None)
+        if cached is not None:
+            return cached
+        size = len(self.serialize())
+        object.__setattr__(self, '_cached_size', size)
+        return size
 
 
 # ---------------------------------------------------------------------------

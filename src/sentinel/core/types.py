@@ -178,15 +178,21 @@ class Detection:
 
     @property
     def bbox_center(self) -> np.ndarray | None:
-        """Return center [cx, cy] of bounding box."""
+        """Return center [cx, cy] of bounding box (cached after first call)."""
         if self.bbox is None:
             return None
-        return np.array(
+        # Cache to avoid repeated allocation in association loops
+        cached = getattr(self, '_bbox_center_cache', None)
+        if cached is not None:
+            return cached
+        center = np.array(
             [
                 (self.bbox[0] + self.bbox[2]) / 2,
                 (self.bbox[1] + self.bbox[3]) / 2,
             ]
         )
+        object.__setattr__(self, '_bbox_center_cache', center)
+        return center
 
     @property
     def bbox_area(self) -> float:

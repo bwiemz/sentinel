@@ -236,24 +236,24 @@ class JPDAAssociator:
             H = track.kf.H
             K = np.linalg.solve(S.T, (track.kf.P @ H.T).T).T
 
-            # Combined innovation
+            # Combined innovation + spread (fused loop)
             dim_meas = len(innovations[0])
             y_c = np.zeros(dim_meas)
+            P_spread = np.zeros((dim_meas, dim_meas))
             for j_idx, y_j in enumerate(innovations):
-                y_c += betas[j_idx] * y_j
+                b = betas[j_idx]
+                y_c += b * y_j
+                P_spread += b * np.outer(y_j, y_j)
+            P_spread -= np.outer(y_c, y_c)
+            P_spread = 0.5 * (P_spread + P_spread.T)
 
             # State update
             track.kf.x = track.kf.x + K @ y_c
 
-            # Covariance update with spread of innovations
-            P_spread = np.zeros((dim_meas, dim_meas))
-            for j_idx, y_j in enumerate(innovations):
-                P_spread += betas[j_idx] * np.outer(y_j, y_j)
-            P_spread -= np.outer(y_c, y_c)
-
             I_KH = np.eye(track.kf.dim_state) - K @ H
             P_std = I_KH @ track.kf.P @ I_KH.T + K @ track.kf.R @ K.T
-            track.kf.P = beta_0 * track.kf.P + (1.0 - beta_0) * P_std + K @ P_spread @ K.T
+            P_new = beta_0 * track.kf.P + (1.0 - beta_0) * P_std + K @ P_spread @ K.T
+            track.kf.P = 0.5 * (P_new + P_new.T)
 
             # Record NIS for quality monitoring
             if track.quality_monitor is not None:
@@ -326,12 +326,14 @@ class RadarJPDAAssociator:
         track_innovations: list[list[np.ndarray]] = []
         track_likelihoods: list[np.ndarray] = []
         track_S: list[np.ndarray | None] = []
+        track_H: list[np.ndarray] = []
 
         for i, track in enumerate(tracks):
             H = track.ekf.H_jacobian(track.ekf.x)
             S = H @ track.ekf.P @ H.T + track.ekf.R
             z_pred = track.ekf.predicted_measurement
             track_S.append(S)
+            track_H.append(H)
 
             gated = []
             innovations = []
@@ -395,27 +397,27 @@ class RadarJPDAAssociator:
 
             betas, beta_0 = _compute_beta_coefficients(likelihoods, self._P_D, self._lam)
             S = track_S[i]
-            H = track.ekf.H_jacobian(track.ekf.x)
+            H = track_H[i]
             K = np.linalg.solve(S.T, (track.ekf.P @ H.T).T).T
 
-            # Combined innovation
+            # Combined innovation + spread (fused loop)
             dim_meas = len(innovations[0])
             y_c = np.zeros(dim_meas)
+            P_spread = np.zeros((dim_meas, dim_meas))
             for j_idx, y_j in enumerate(innovations):
-                y_c += betas[j_idx] * y_j
+                b = betas[j_idx]
+                y_c += b * y_j
+                P_spread += b * np.outer(y_j, y_j)
+            P_spread -= np.outer(y_c, y_c)
+            P_spread = 0.5 * (P_spread + P_spread.T)
 
             # State update
             track.ekf.x = track.ekf.x + K @ y_c
 
-            # Covariance update
-            P_spread = np.zeros((dim_meas, dim_meas))
-            for j_idx, y_j in enumerate(innovations):
-                P_spread += betas[j_idx] * np.outer(y_j, y_j)
-            P_spread -= np.outer(y_c, y_c)
-
             I_KH = np.eye(track.ekf.dim_state) - K @ H
             P_std = I_KH @ track.ekf.P @ I_KH.T + K @ track.ekf.R @ K.T
-            track.ekf.P = beta_0 * track.ekf.P + (1.0 - beta_0) * P_std + K @ P_spread @ K.T
+            P_new = beta_0 * track.ekf.P + (1.0 - beta_0) * P_std + K @ P_spread @ K.T
+            track.ekf.P = 0.5 * (P_new + P_new.T)
 
             # Record NIS
             if track.quality_monitor is not None:
@@ -485,12 +487,14 @@ class ThermalJPDAAssociator:
         track_innovations: list[list[np.ndarray]] = []
         track_likelihoods: list[np.ndarray] = []
         track_S: list[np.ndarray | None] = []
+        track_H: list[np.ndarray] = []
 
         for i, track in enumerate(tracks):
             H = track.ekf.H_jacobian(track.ekf.x)
             S = H @ track.ekf.P @ H.T + track.ekf.R
             z_pred = track.ekf.predicted_measurement
             track_S.append(S)
+            track_H.append(H)
 
             gated = []
             innovations = []
@@ -541,26 +545,26 @@ class ThermalJPDAAssociator:
 
             betas, beta_0 = _compute_beta_coefficients(likelihoods, self._P_D, self._lam)
             S = track_S[i]
-            H = track.ekf.H_jacobian(track.ekf.x)
+            H = track_H[i]
             K = np.linalg.solve(S.T, (track.ekf.P @ H.T).T).T
 
-            # Combined innovation (1D bearing)
+            # Combined innovation + spread (fused loop, 1D bearing)
             y_c = np.zeros(1)
+            P_spread = np.zeros((1, 1))
             for j_idx, y_j in enumerate(innovations):
-                y_c += betas[j_idx] * y_j
+                b = betas[j_idx]
+                y_c += b * y_j
+                P_spread += b * np.outer(y_j, y_j)
+            P_spread -= np.outer(y_c, y_c)
+            P_spread = 0.5 * (P_spread + P_spread.T)
 
             # State update
             track.ekf.x = track.ekf.x + K @ y_c
 
-            # Covariance update
-            P_spread = np.zeros((1, 1))
-            for j_idx, y_j in enumerate(innovations):
-                P_spread += betas[j_idx] * np.outer(y_j, y_j)
-            P_spread -= np.outer(y_c, y_c)
-
             I_KH = np.eye(track.ekf.dim_state) - K @ H
             P_std = I_KH @ track.ekf.P @ I_KH.T + K @ track.ekf.R @ K.T
-            track.ekf.P = beta_0 * track.ekf.P + (1.0 - beta_0) * P_std + K @ P_spread @ K.T
+            P_new = beta_0 * track.ekf.P + (1.0 - beta_0) * P_std + K @ P_spread @ K.T
+            track.ekf.P = 0.5 * (P_new + P_new.T)
 
             # Record NIS
             if track.quality_monitor is not None:

@@ -95,21 +95,40 @@ def _get_sensor_type(track: Any) -> str:
     return "camera"
 
 
-def _extract_position_cov(x: np.ndarray, P: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Extract 2D position and covariance from [x, vx, y, vy, ...] state.
+def _position_indices(x: np.ndarray, is_ca: bool = False) -> tuple[int, int]:
+    """Determine position [x, y] indices in a state vector.
+
+    State layouts:
+      4D CV:     [x, vx, y, vy]         → indices (0, 2)
+      6D CA:     [x, vx, ax, y, vy, ay] → indices (0, 3)
+      6D 3D-CV:  [x, vx, y, vy, z, vz]  → indices (0, 2)
+    """
+    if len(x) == 6 and is_ca:
+        return (0, 3)
+    return (0, 2)
+
+
+def _extract_position_cov(
+    x: np.ndarray,
+    P: np.ndarray,
+    is_ca: bool = False,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Extract 2D position and covariance from a state vector.
 
     Args:
         x: Full state vector (4D or 6D).
         P: Full state covariance matrix.
+        is_ca: True if state layout is CA [x,vx,ax,y,vy,ay] (6D only).
 
     Returns:
         (pos_2d, cov_2x2) where pos_2d = [x, y] and cov_2x2 is the
         position-only covariance submatrix.
     """
-    pos = np.array([x[0], x[2]])
+    i, j = _position_indices(x, is_ca)
+    pos = np.array([x[i], x[j]])
     cov = np.array([
-        [P[0, 0], P[0, 2]],
-        [P[2, 0], P[2, 2]],
+        [P[i, i], P[i, j]],
+        [P[j, i], P[j, j]],
     ])
     return pos, cov
 
@@ -127,7 +146,12 @@ def predict_track_to_epoch(track: Any, target_time: float) -> AlignedTrackState:
         AlignedTrackState with position/covariance at target_time.
     """
     x_pred, P_pred = track.predict_to_time(target_time)
-    pos, cov = _extract_position_cov(x_pred, P_pred)
+    # Detect CA layout: 6D state without 3D flag means [x,vx,ax,y,vy,ay]
+    is_ca = (
+        len(x_pred) == 6
+        and not getattr(track, '_use_3d', False)
+    )
+    pos, cov = _extract_position_cov(x_pred, P_pred, is_ca=is_ca)
 
     return AlignedTrackState(
         position=pos,

@@ -100,7 +100,10 @@ class ThermalTrack(TrackBase):
         F[2, 3] = dt
 
         x_pred = F @ self.ekf.x
-        P_pred = F @ self.ekf.P @ F.T + self.ekf.Q
+        # Scale process noise for the prediction interval
+        dt_nominal = getattr(self.ekf, 'dt', dt)
+        Q_scale = dt / dt_nominal if dt_nominal > 0 else 1.0
+        P_pred = F @ self.ekf.P @ F.T + self.ekf.Q * Q_scale
         return x_pred, P_pred
 
     def mark_missed(self) -> None:

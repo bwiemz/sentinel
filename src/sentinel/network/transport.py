@@ -202,11 +202,11 @@ class SimulatedTransport:
         dest_transport = self._hub.nodes[dest]
         if profile.should_reorder(self._rng) and len(dest_transport._inbox) > 0:
             stats.messages_reordered += 1
-            pos = self._rng.randint(0, len(dest_transport._inbox))
-            # Convert deque to list, insert, convert back
-            items = list(dest_transport._inbox)
-            items.insert(pos, (self._node_id, data))
-            dest_transport._inbox = deque(items)
+            # O(1) reorder: append then rotate a random amount to simulate
+            # out-of-order insertion without list rebuild
+            dest_transport._inbox.append((self._node_id, data))
+            rotate_n = self._rng.randint(1, len(dest_transport._inbox))
+            dest_transport._inbox.rotate(rotate_n)
         else:
             dest_transport._inbox.append((self._node_id, data))
 

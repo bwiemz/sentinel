@@ -6,10 +6,13 @@ receiving remote data from peer nodes.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from sentinel.core.types import MessageType
 from sentinel.network.messages import (
@@ -157,6 +160,7 @@ class NetworkBridge:
             try:
                 msg = NetworkMessage.deserialize(raw)
             except Exception:
+                logger.debug("Failed to deserialize message from %s", source)
                 continue
 
             # Route to appropriate topic based on message type

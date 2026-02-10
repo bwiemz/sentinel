@@ -212,9 +212,21 @@ class TrackFusion:
         else:
             rdr_aligned = None
 
+        # Pre-extract radar positions/covariances once (avoid M extractions per camera track)
+        rdr_data: list[tuple[np.ndarray, np.ndarray]] = []
+        for j, rt in enumerate(radar_tracks):
+            if rdr_aligned is not None:
+                rdr_data.append((rdr_aligned[j].position, rdr_aligned[j].covariance))
+            else:
+                is_ca = rt.ekf.dim_state == 6 and not getattr(rt, '_use_3d', False)
+                rdr_data.append(_extract_position_cov(rt.ekf.x, rt.ekf.P, is_ca=is_ca))
+
+        hfov_rad = np.radians(self._hfov_deg)
+
         for i, ct in enumerate(camera_tracks):
             cam_az_deg = self.pixel_to_azimuth(ct.position[0])
             cam_az_rad = np.radians(cam_az_deg)
+            cam_P00 = ct.kf.P[0, 0]
 
             for j, rt in enumerate(radar_tracks):
                 ang_dist = self._angular_distance(cam_az_deg, rt.azimuth_deg)
@@ -227,16 +239,10 @@ class TrackFusion:
                     rt.range_m * np.sin(cam_az_rad),
                 ])
                 # Camera covariance in world: scale pixel uncertainty to meters
-                px_to_m = rt.range_m * np.radians(self._hfov_deg) / self._img_width
-                cam_cov = np.eye(2) * (px_to_m ** 2) * ct.kf.P[0, 0]
+                px_to_m = rt.range_m * hfov_rad / self._img_width
+                cam_cov = np.eye(2) * (px_to_m ** 2) * cam_P00
 
-                # Radar position and covariance
-                if rdr_aligned is not None:
-                    pos_r = rdr_aligned[j].position
-                    cov_r = rdr_aligned[j].covariance
-                else:
-                    pos_r, cov_r = _extract_position_cov(rt.ekf.x, rt.ekf.P)
-
+                pos_r, cov_r = rdr_data[j]
                 d2 = track_to_track_mahalanobis(cam_world, cam_cov, pos_r, cov_r)
                 if d2 <= self._stat_gate:
                     cost[i, j] = d2
@@ -318,14 +324,9 @@ class TrackFusion:
         cam_P_world = np.eye(2) * (pixel_to_meter**2) * cam.kf.P[0, 0]
 
         # Radar position and 2D position covariance
-        rdr_pos = rdr.position[:2]  # [x, y] in meters
-        # Extract 2x2 position covariance from 4x4 state covariance
-        rdr_P = np.array(
-            [
-                [rdr.ekf.P[0, 0], rdr.ekf.P[0, 2]],
-                [rdr.ekf.P[2, 0], rdr.ekf.P[2, 2]],
-            ]
-        )
+        # Detect CA layout: 6D state without 3D flag means [x,vx,ax,y,vy,ay]
+        is_ca = rdr.ekf.dim_state == 6 and not getattr(rdr, '_use_3d', False)
+        rdr_pos, rdr_P = _extract_position_cov(rdr.ekf.x, rdr.ekf.P, is_ca=is_ca)
 
         return covariance_intersection(cam_world, cam_P_world, rdr_pos, rdr_P)
 

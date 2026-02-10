@@ -148,7 +148,10 @@ class Track(TrackBase):
             F[2, 3] = dt
 
         x_pred = F @ self.kf.x
-        P_pred = F @ self.kf.P @ F.T + self.kf.Q
+        # Scale process noise for the prediction interval
+        dt_nominal = getattr(self.kf, 'dt', dt)
+        Q_scale = dt / dt_nominal if dt_nominal > 0 else 1.0
+        P_pred = F @ self.kf.P @ F.T + self.kf.Q * Q_scale
         return x_pred, P_pred
 
     def mark_missed(self) -> None:

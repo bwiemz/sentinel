@@ -126,19 +126,24 @@ class IMMFilter:
         for j in range(self._n_models):
             dim_j = self._dims[j]
 
+            # Cache expanded states/covariances (avoid redundant expansion)
+            expanded_x = [self._expand_state(self._filters[i].x, self._dims[i], dim_j)
+                          for i in range(self._n_models)]
+            expanded_P = [self._expand_covariance(self._filters[i].P, self._dims[i], dim_j)
+                          for i in range(self._n_models)]
+
             # Mixed state
             x_mix = np.zeros(dim_j)
             for i in range(self._n_models):
-                x_i = self._expand_state(self._filters[i].x, self._dims[i], dim_j)
-                x_mix += mixing_probs[i, j] * x_i
+                x_mix += mixing_probs[i, j] * expanded_x[i]
 
-            # Mixed covariance
+            # Mixed covariance (reuse cached expansions)
             P_mix = np.zeros((dim_j, dim_j))
             for i in range(self._n_models):
-                x_i = self._expand_state(self._filters[i].x, self._dims[i], dim_j)
-                P_i = self._expand_covariance(self._filters[i].P, self._dims[i], dim_j)
-                dx = x_i - x_mix
-                P_mix += mixing_probs[i, j] * (P_i + np.outer(dx, dx))
+                dx = expanded_x[i] - x_mix
+                P_mix += mixing_probs[i, j] * (expanded_P[i] + np.outer(dx, dx))
+            # Enforce symmetry (numerical drift from mixed-dimension ops)
+            P_mix = 0.5 * (P_mix + P_mix.T)
 
             self._filters[j].x = x_mix
             self._filters[j].P = P_mix
@@ -147,19 +152,26 @@ class IMMFilter:
 
     def _combine(self) -> None:
         """Combine model estimates into a single output."""
+        # Cache expanded states/covariances once
+        expanded_x = [self._expand_state(self._filters[i].x, self._dims[i], 6)
+                      for i in range(self._n_models)]
+        expanded_P = [self._expand_covariance(self._filters[i].P, self._dims[i], 6)
+                      for i in range(self._n_models)]
+
         # Combined state in 6D space
         self._combined_x = np.zeros(6)
         for i in range(self._n_models):
-            x_i = self._expand_state(self._filters[i].x, self._dims[i], 6)
-            self._combined_x += self.mu[i] * x_i
+            self._combined_x += self.mu[i] * expanded_x[i]
 
         # Combined covariance
         self._combined_P = np.zeros((6, 6))
         for i in range(self._n_models):
-            x_i = self._expand_state(self._filters[i].x, self._dims[i], 6)
-            P_i = self._expand_covariance(self._filters[i].P, self._dims[i], 6)
+            P_i = expanded_P[i]
+            x_i = expanded_x[i]
             dx = x_i - self._combined_x
             self._combined_P += self.mu[i] * (P_i + np.outer(dx, dx))
+        # Enforce symmetry
+        self._combined_P = 0.5 * (self._combined_P + self._combined_P.T)
 
     @staticmethod
     def _expand_state(x: np.ndarray, from_dim: int, to_dim: int) -> np.ndarray:
