@@ -90,6 +90,9 @@ class CompositeFusion:
         Returns:
             Merged list of tracks (local tracks updated in-place + new remote-only tracks).
         """
+        # 0. Evict stale composite info to prevent unbounded memory growth
+        self._evict_stale_info(local_tracks)
+
         # 1. Flatten and filter stale remote tracks
         all_remote = self._flatten_remote(remote_tracks, current_time)
         if not all_remote:
@@ -130,6 +133,17 @@ class CompositeFusion:
         return self._composite_info.get(track_id)
 
     # --- Internal ---
+
+    def _evict_stale_info(self, local_tracks: list) -> None:
+        """Remove composite info for tracks no longer in the local set."""
+        active_ids = set()
+        for lt in local_tracks:
+            fid = getattr(lt, "fused_id", None)
+            if fid is not None:
+                active_ids.add(fid)
+        stale = [tid for tid in self._composite_info if tid not in active_ids]
+        for tid in stale:
+            del self._composite_info[tid]
 
     def _flatten_remote(
         self,
@@ -204,9 +218,9 @@ class CompositeFusion:
         local_weight = local_conf / total
         remote_weight = remote_conf / total
 
-        # Apply local preference bias
+        # Apply local preference bias (clamp to [0, 1])
         if self._prefer_local:
-            local_weight = max(local_weight, 0.6)
+            local_weight = min(max(local_weight, 0.6), 1.0)
             remote_weight = 1.0 - local_weight
 
         pos_local = self._get_position(local_track)

@@ -309,6 +309,9 @@ class ZoneManager:
                 idx = len(_ZONE_AUTH_RESTRICTIVENESS)
             if idx < best_idx:
                 best_idx = idx
+        if best_idx >= len(_ZONE_AUTH_RESTRICTIVENESS):
+            # All zones had unrecognized authorization — default to most restrictive
+            return _ZONE_AUTH_RESTRICTIVENESS[0]
         return _ZONE_AUTH_RESTRICTIVENESS[best_idx]
 
     @classmethod

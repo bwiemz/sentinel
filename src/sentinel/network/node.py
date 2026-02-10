@@ -171,7 +171,10 @@ class NetworkNode:
         if peer_id not in self._peers:
             self._peers[peer_id] = PeerInfo(node_id=peer_id)
         peer = self._peers[peer_id]
-        peer.state = NodeState(payload.get("state", "active"))
+        try:
+            peer.state = NodeState(payload.get("state", "active"))
+        except (ValueError, KeyError):
+            peer.state = NodeState.ACTIVE
         peer.capabilities = payload.get("capabilities", [])
         peer.last_heartbeat = heartbeat.timestamp
         peer.track_count = payload.get("track_count", 0)

@@ -172,6 +172,9 @@ class WEZCalculator:
             track_velocity: Target velocity [vx, vy] or [vx, vy, vz].
             track_id: Target track identifier.
         """
+        if len(track_position) < 2 or len(track_velocity) < 2:
+            return WEZResult(weapon_id=weapon.weapon_id, track_id=track_id)
+
         target_alt = float(track_position[2]) if len(track_position) >= 3 else 0.0
         slant_range = self.compute_slant_range(
             weapon.position_xy, weapon.altitude_m,

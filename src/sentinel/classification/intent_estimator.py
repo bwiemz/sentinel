@@ -132,6 +132,8 @@ class IntentEstimator:
             return None, float(np.linalg.norm(rel_pos))
 
         t_cpa = -float(np.dot(rel_pos, velocity)) / speed_sq
+        if not np.isfinite(t_cpa):
+            return None, float(np.linalg.norm(rel_pos))
         if t_cpa < 0:
             # CPA is in the past; current range is closest
             return 0.0, float(np.linalg.norm(rel_pos))

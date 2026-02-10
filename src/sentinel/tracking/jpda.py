@@ -193,7 +193,10 @@ class JPDAAssociator:
                     continue
 
                 y = center - z_pred
-                mahal = float(y @ np.linalg.solve(S, y))
+                try:
+                    mahal = float(y @ np.linalg.solve(S, y))
+                except np.linalg.LinAlgError:
+                    continue
                 if mahal > self._gate:
                     continue
 
@@ -234,6 +237,10 @@ class JPDAAssociator:
             betas, beta_0 = _compute_beta_coefficients(likelihoods, self._P_D, self._lam)
             S = track_S[i]
             H = track.kf.H
+
+            if len(betas) == 0 or np.sum(betas) < 1e-30:
+                continue  # All likelihoods zero — skip update
+
             K = np.linalg.solve(S.T, (track.kf.P @ H.T).T).T
 
             # Combined innovation + spread (fused loop)
@@ -398,6 +405,10 @@ class RadarJPDAAssociator:
             betas, beta_0 = _compute_beta_coefficients(likelihoods, self._P_D, self._lam)
             S = track_S[i]
             H = track_H[i]
+
+            if len(betas) == 0 or np.sum(betas) < 1e-30:
+                continue  # All likelihoods zero — skip update
+
             K = np.linalg.solve(S.T, (track.ekf.P @ H.T).T).T
 
             # Combined innovation + spread (fused loop)
@@ -546,6 +557,10 @@ class ThermalJPDAAssociator:
             betas, beta_0 = _compute_beta_coefficients(likelihoods, self._P_D, self._lam)
             S = track_S[i]
             H = track_H[i]
+
+            if len(betas) == 0 or np.sum(betas) < 1e-30:
+                continue  # All likelihoods zero — skip update
+
             K = np.linalg.solve(S.T, (track.ekf.P @ H.T).T).T
 
             # Combined innovation + spread (fused loop, 1D bearing)

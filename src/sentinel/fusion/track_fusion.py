@@ -93,6 +93,8 @@ class TrackFusion:
         statistical_distance_gate: float = 9.21,
     ):
         self._hfov_deg = camera_hfov_deg
+        if image_width_px <= 0:
+            raise ValueError(f"image_width_px must be positive, got {image_width_px}")
         self._img_width = image_width_px
         self._gate_deg = azimuth_gate_deg
         self._use_ci = use_ci_fusion

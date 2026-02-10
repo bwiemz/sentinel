@@ -130,18 +130,25 @@ class WeaponTargetAssigner:
         # Hungarian assignment
         row_ind, col_ind = linear_sum_assignment(cost)
 
-        # Extract valid assignments (filter infeasible)
+        # Extract valid assignments (filter infeasible + check ammo budget)
         assignments: list[tuple[str, str]] = []
         assigned_weapon_ids: set[str] = set()
         assigned_track_ids: set[str] = set()
+        weapon_ammo_used: dict[str, int] = {}  # cumulative ammo per weapon
 
         for r, c in zip(row_ind, col_ind):
             if cost[r, c] >= _INFEASIBLE_COST:
                 continue
-            wid = slots[r][0].weapon_id
+            weapon = slots[r][0]
+            wid = weapon.weapon_id
             tid = engageable_tracks[c]["track_id"]
             feas = feas_map.get((wid, tid))
             if feas and feas.engagement_permitted:
+                # Check cumulative ammo doesn't exceed rounds_remaining
+                ammo_needed = weapon_ammo_used.get(wid, 0) + weapon.salvo_size
+                if ammo_needed > weapon.rounds_remaining:
+                    continue  # Insufficient ammo for this additional engagement
+                weapon_ammo_used[wid] = ammo_needed
                 assignments.append((wid, tid))
                 assigned_weapon_ids.add(wid)
                 assigned_track_ids.add(tid)

@@ -192,10 +192,12 @@ class EngagementManager:
 
         # Track ID
         track_id = ""
-        if hasattr(track, "fused_id"):
+        if hasattr(track, "fused_id") and track.fused_id is not None:
             track_id = str(track.fused_id)
-        elif hasattr(track, "track_id"):
+        elif hasattr(track, "track_id") and track.track_id is not None:
             track_id = str(track.track_id)
+        if not track_id:
+            track_id = f"UNK-{id(track)}"
 
         # Engagement auth
         eng_auth = EngagementAuth.WEAPONS_HOLD

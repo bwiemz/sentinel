@@ -549,13 +549,13 @@ class SentinelPipeline:
                     self._process_radar_scan()
                     self._update_timing("radar_ms", (time.perf_counter() - t_radar) * 1000)
                     self._sensor_health["radar"].record_success()
+                    last_radar_time = timestamp
                 except Exception:
                     logger.exception("Radar scan failed")
                     if self._sensor_health["radar"].record_error():
                         logger.warning(
                             "Radar disabled after %d consecutive errors", self._sensor_health["radar"].max_errors
                         )
-                last_radar_time = timestamp
 
             # 3b. Multi-frequency radar scan (if enabled)
             if (
@@ -567,6 +567,7 @@ class SentinelPipeline:
                 try:
                     self._process_multifreq_radar_scan()
                     self._sensor_health["multifreq_radar"].record_success()
+                    last_mfr_time = timestamp
                 except Exception:
                     logger.exception("Multi-freq radar scan failed")
                     if self._sensor_health["multifreq_radar"].record_error():
@@ -574,7 +575,6 @@ class SentinelPipeline:
                             "Multi-freq radar disabled after %d consecutive errors",
                             self._sensor_health["multifreq_radar"].max_errors,
                         )
-                last_mfr_time = timestamp
 
             # 3c. Thermal scan (if enabled)
             if (
@@ -586,13 +586,13 @@ class SentinelPipeline:
                 try:
                     self._process_thermal_scan()
                     self._sensor_health["thermal"].record_success()
+                    last_thermal_time = timestamp
                 except Exception:
                     logger.exception("Thermal scan failed")
                     if self._sensor_health["thermal"].record_error():
                         logger.warning(
                             "Thermal disabled after %d consecutive errors", self._sensor_health["thermal"].max_errors
                         )
-                last_thermal_time = timestamp
 
             # 3d. Quantum radar scan (if enabled)
             if (
@@ -604,6 +604,7 @@ class SentinelPipeline:
                 try:
                     self._process_quantum_radar_scan()
                     self._sensor_health["quantum_radar"].record_success()
+                    last_qr_time = timestamp
                 except Exception:
                     logger.exception("Quantum radar scan failed")
                     if self._sensor_health["quantum_radar"].record_error():
@@ -611,7 +612,6 @@ class SentinelPipeline:
                             "Quantum radar disabled after %d consecutive errors",
                             self._sensor_health["quantum_radar"].max_errors,
                         )
-                last_qr_time = timestamp
 
             # 4. Fusion (every camera frame, using latest tracks)
             try:

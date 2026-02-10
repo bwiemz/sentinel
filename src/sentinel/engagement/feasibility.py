@@ -66,6 +66,12 @@ class FeasibilityCalculator:
         threat_weight: float = 0.3,
         max_tti_s: float = 120.0,
     ):
+        # Normalize weights so they sum to 1.0
+        total = pk_weight + tti_weight + threat_weight
+        if total > 0 and abs(total - 1.0) > 1e-6:
+            pk_weight /= total
+            tti_weight /= total
+            threat_weight /= total
         self._pk_weight = pk_weight
         self._tti_weight = tti_weight
         self._threat_weight = threat_weight
