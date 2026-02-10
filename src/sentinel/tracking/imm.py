@@ -237,13 +237,16 @@ class IMMFilter:
         dim = len(z)
 
         det_S = np.linalg.det(S)
-        if det_S < 1e-300:
+        if det_S <= 1e-300:
             return 1e-300
 
-        exponent = -0.5 * float(y.T @ np.linalg.solve(S, y))
+        try:
+            exponent = -0.5 * float(y.T @ np.linalg.solve(S, y))
+        except np.linalg.LinAlgError:
+            return 1e-300
         # Clamp exponent to prevent underflow
         exponent = max(exponent, -500.0)
-        normalization = 1.0 / np.sqrt((2 * np.pi) ** dim * det_S)
+        normalization = 1.0 / np.sqrt((2 * np.pi) ** dim * abs(det_S))
         return normalization * np.exp(exponent)
 
     def gating_distance(self, z: np.ndarray) -> float:
@@ -310,6 +313,16 @@ class IMMFilter:
     @property
     def R(self) -> np.ndarray:
         return self._filters[0].R
+
+    @property
+    def H(self) -> np.ndarray:
+        """Measurement matrix from primary (CV) filter."""
+        return self._filters[0].H
+
+    @property
+    def Q(self) -> np.ndarray:
+        """Process noise matrix from primary (CV) filter."""
+        return self._filters[0].Q
 
     @property
     def is_maneuvering(self) -> bool:

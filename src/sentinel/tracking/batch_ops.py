@@ -269,7 +269,10 @@ def batch_gaussian_likelihood(
     if sign <= 0:
         return np.zeros(N)
 
-    S_inv = np.linalg.inv(S_)
+    try:
+        S_inv = np.linalg.inv(S_)
+    except np.linalg.LinAlgError:
+        return np.zeros(N)
 
     if _HAS_CPP_BATCH:
         return np.asarray(

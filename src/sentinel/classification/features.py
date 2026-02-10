@@ -95,10 +95,10 @@ class FeatureExtractor:
 
         # --- Kinematic features (0-7) ---
         speed = 0.0
-        if vel is not None:
+        if vel is not None and len(vel) >= 2:
             speed = float(np.linalg.norm(vel))
             features[0] = speed
-            features[1] = speed / self._c
+            features[1] = speed / max(self._c, 1e-6)
             features[2] = float(np.arctan2(vel[1], vel[0]))
         else:
             features[0] = 0.0
@@ -110,7 +110,7 @@ class FeatureExtractor:
         elif pos is not None:
             features[3] = float(np.linalg.norm(pos - self._sensor_pos))
 
-        if pos is not None and vel is not None:
+        if pos is not None and vel is not None and len(vel) >= 2:
             rel_pos = pos - self._sensor_pos
             dist = float(np.linalg.norm(rel_pos))
             if dist > 1e-6:
@@ -247,8 +247,11 @@ class FeatureExtractor:
                     if ekf is not None:
                         x = ekf.x
                 if x is not None and len(x) >= 6:
-                    # CA state: [x, vx, ax, y, vy, ay]
-                    return np.array([x[2], x[5]])
+                    # Only extract acceleration from CA filter (6D: [x,vx,ax,y,vy,ay])
+                    # Skip 3D EKF state vectors (6D: [x,vx,y,vy,z,vz])
+                    filter_type = getattr(track, "filter_type", None)
+                    if filter_type == "ca":
+                        return np.array([x[2], x[5]])
         return None
 
     @staticmethod

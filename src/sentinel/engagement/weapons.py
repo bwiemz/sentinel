@@ -94,7 +94,7 @@ class WeaponProfile:
             max_aspect_angle_deg=float(cfg.get("max_aspect_angle_deg", 180.0)),
             max_simultaneous_engagements=int(cfg.get("max_simultaneous_engagements", 2)),
             rounds_remaining=int(cfg.get("rounds_remaining", 10)),
-            salvo_size=int(cfg.get("salvo_size", 1)),
+            salvo_size=max(int(cfg.get("salvo_size", 1)), 1),
             reload_time_s=float(cfg.get("reload_time_s", 5.0)),
         )
 

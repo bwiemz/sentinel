@@ -257,10 +257,10 @@ class NetworkBridge:
         if position is None:
             return None
 
-        velocity_mps = getattr(track, "velocity_mps", 0.0)
+        velocity_mps = getattr(track, "velocity_mps", 0.0) or 0.0
         velocity = getattr(track, "velocity", None)
-        if velocity is None or (hasattr(velocity, "__len__") and len(velocity) == 0):
-            velocity = np.array([velocity_mps, 0.0])
+        if velocity is None or np.isscalar(velocity) or (hasattr(velocity, "__len__") and len(velocity) == 0):
+            velocity = np.array([float(velocity_mps), 0.0])
 
         # Covariance for composite fusion
         covariance = getattr(track, "fused_covariance", None)

@@ -104,7 +104,7 @@ def ecef_to_geodetic(
     if abs(cos_lat) > 1e-10:
         alt = p / cos_lat - N
     else:
-        alt = abs(z) / abs(sin_lat) - N * (1.0 - WGS84_E2)
+        alt = abs(z) / max(abs(sin_lat), 1e-15) - N * (1.0 - WGS84_E2)
 
     return (math.degrees(lat), math.degrees(lon), alt)
 
@@ -204,6 +204,7 @@ def haversine_distance(
     dlon = math.radians(lon2_deg - lon1_deg)
 
     a = math.sin(dlat / 2.0) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2.0) ** 2
+    a = max(0.0, min(1.0, a))  # Clamp for floating-point safety
     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
     # Use mean radius for Haversine (standard convention)
     R = (WGS84_A + WGS84_B) / 2.0

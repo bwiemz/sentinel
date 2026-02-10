@@ -385,7 +385,7 @@ class MultiSensorFusion:
             quantum_radar_track=qt,
             azimuth_deg=qt.azimuth_deg,
             range_m=qt.range_m,
-            velocity_mps=float(np.linalg.norm(qt.velocity)),
+            velocity_mps=float(np.linalg.norm(qt.velocity)) if qt.velocity is not None else 0.0,
             has_quantum_confirmation=True,
             sensor_sources={SensorType.QUANTUM_RADAR},
             fusion_quality=qt.score * 0.3,

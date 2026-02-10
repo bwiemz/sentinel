@@ -122,6 +122,13 @@ class WeaponTargetAssigner:
         # Expand weapons into individual engagement slots
         slots = self._expand_weapon_slots(weapons)
 
+        if not slots:
+            return EngagementAssignment(
+                assignments=[],
+                unassigned_weapons=[w.weapon_id for w in weapons],
+                unassigned_tracks=[t["track_id"] for t in engageable_tracks],
+            )
+
         # Build cost matrix and feasibility map
         cost, feas_map = self._build_cost_matrix(
             slots, engageable_tracks, default_zone_auth,

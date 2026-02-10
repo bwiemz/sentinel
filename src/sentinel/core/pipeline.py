@@ -716,7 +716,7 @@ class SentinelPipeline:
 
         # Correlate across frequency bands
         if self._multifreq_correlator is not None:
-            self._latest_correlated_detections = self._multifreq_correlator.correlate(dets)
+            self._latest_correlated_detections, _ = self._multifreq_correlator.correlate(dets)
 
         # Feed primary detections into radar tracker
         if self._radar_track_manager is not None:

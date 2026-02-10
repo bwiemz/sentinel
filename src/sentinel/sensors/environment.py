@@ -130,6 +130,8 @@ class TerrainGrid:
         Returns 0.0 for points outside the grid.
         """
         # Convert to fractional grid indices
+        if self.resolution_m <= 0:
+            return 0.0
         fi = (x - self.origin_x_m) / self.resolution_m
         fj = (y - self.origin_y_m) / self.resolution_m
         ny, nx = self.elevation_data.shape
@@ -155,6 +157,8 @@ class TerrainGrid:
 
         Returns 0.0 for points outside the grid.
         """
+        if self.resolution_m <= 0:
+            return np.zeros_like(xs, dtype=float)
         fi = (xs - self.origin_x_m) / self.resolution_m
         fj = (ys - self.origin_y_m) / self.resolution_m
         ny, nx = self.elevation_data.shape
@@ -319,7 +323,7 @@ def thermal_atmospheric_transmission(
         base_extinction += 0.02 * rain_rate_mm_h ** 0.6
 
     # Visibility reduction (Beer-Lambert)
-    if visibility_km > 0:
+    if visibility_km > 1e-3:
         # Meteorological visibility relates to extinction at 550nm
         # IR extinction is generally lower, so we scale down
         vis_extinction = 3.912 / visibility_km * 0.3  # ~30% of visible extinction

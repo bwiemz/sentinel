@@ -75,7 +75,7 @@ class FeasibilityCalculator:
         self._pk_weight = pk_weight
         self._tti_weight = tti_weight
         self._threat_weight = threat_weight
-        self._max_tti_s = max_tti_s
+        self._max_tti_s = max(max_tti_s, 1.0)
 
     def evaluate(
         self,
@@ -139,7 +139,7 @@ class FeasibilityCalculator:
         if weapon.max_aspect_angle_deg < 180.0:
             # Linear degradation toward weapon's aspect limits
             aspect_range = weapon.max_aspect_angle_deg - weapon.min_aspect_angle_deg
-            if aspect_range > 0:
+            if aspect_range > 1e-3:
                 center = (weapon.min_aspect_angle_deg + weapon.max_aspect_angle_deg) / 2.0
                 deviation = abs(wez.aspect_angle_deg - center) / (aspect_range / 2.0)
                 aspect_factor = max(0.0, 1.0 - 0.3 * deviation)
@@ -156,8 +156,8 @@ class FeasibilityCalculator:
         Head-on: TTI = range / (weapon_speed + closing_speed)
         Pursuit: TTI = range / (weapon_speed - |opening_speed|)
         """
-        if not wez.feasible or wez.slant_range_m < 1.0:
-            return 0.0 if wez.feasible else float("inf")
+        if not wez.feasible or wez.slant_range_m < 1.0 or weapon.weapon_speed_mps <= 0:
+            return 0.0 if (wez.feasible and weapon.weapon_speed_mps > 0) else float("inf")
 
         if wez.closing_speed_mps > 0:
             # Target approaching — head-on geometry
@@ -260,5 +260,8 @@ class FeasibilityCalculator:
         if slant_range >= max_range:
             return 0.0
         # Quadratic falloff beyond optimal
-        ratio = (slant_range - optimal_range) / max(max_range - optimal_range, 1.0)
+        denom = max_range - optimal_range
+        if denom <= 0:
+            return 0.0  # No falloff zone — beyond envelope
+        ratio = (slant_range - optimal_range) / denom
         return max(0.0, 1.0 - ratio ** falloff)

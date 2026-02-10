@@ -17,8 +17,11 @@ from scipy.optimize import minimize_scalar
 
 def _spd_inv(P: np.ndarray) -> np.ndarray:
     """Invert a symmetric positive-definite matrix via Cholesky decomposition."""
-    c, low = cho_factor(P)
-    return cho_solve((c, low), np.eye(P.shape[0]))
+    try:
+        c, low = cho_factor(P)
+        return cho_solve((c, low), np.eye(P.shape[0]))
+    except np.linalg.LinAlgError:
+        return np.linalg.pinv(P)
 
 
 def _spd_solve(P: np.ndarray, b: np.ndarray) -> np.ndarray:

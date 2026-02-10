@@ -228,7 +228,8 @@ class CompositeFusion:
             dim = min(len(pos_local), len(remote.position))
             merged_pos = local_weight * pos_local[:dim] + remote_weight * remote.position[:dim]
             if hasattr(local_track, "position_m") and local_track.position_m is not None:
-                local_track.position_m[:dim] = merged_pos
+                actual_dim = min(dim, len(local_track.position_m))
+                local_track.position_m[:actual_dim] = merged_pos[:actual_dim]
 
         # Take the highest threat level
         threat_order = {"UNKNOWN": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}

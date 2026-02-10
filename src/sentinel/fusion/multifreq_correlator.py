@@ -198,7 +198,8 @@ class MultiFreqCorrelator:
         primary = group[bands[0]]
 
         # Combined RCS: average across bands
-        rcs_values = [d.rcs_dbsm for d in group.values() if d.rcs_dbsm is not None]
+        rcs_values = [d.rcs_dbsm for d in group.values()
+                      if d.rcs_dbsm is not None and np.isfinite(d.rcs_dbsm)]
         avg_rcs = np.mean(rcs_values) if rcs_values else 0.0
 
         # Check for stealth signature (large RCS variation across bands)

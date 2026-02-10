@@ -302,7 +302,10 @@ def thermal_background_photons(freq_hz: float, temp_k: float) -> float:
     exponent = (_PLANCK_H * freq_hz) / (_BOLTZMANN_K * temp_k)
     if exponent > 500:  # Avoid overflow
         return 0.0
-    return 1.0 / (math.exp(exponent) - 1.0)
+    denom = math.exp(exponent) - 1.0
+    if abs(denom) < 1e-15:
+        return 1e10  # High background at very low frequency
+    return 1.0 / denom
 
 
 def qi_error_exponent(

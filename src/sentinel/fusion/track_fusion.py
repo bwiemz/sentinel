@@ -255,7 +255,7 @@ class TrackFusion:
     def _extract_position_geo(rdr: RadarTrack) -> dict | None:
         """Extract geodetic position dict from a radar track, or None."""
         geo = rdr.position_geo
-        if geo is None:
+        if geo is None or len(geo) < 3:
             return None
         return {
             "lat": round(geo[0], 7),

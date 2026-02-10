@@ -35,6 +35,8 @@ def _point_in_polygon(point_xy: np.ndarray, vertices: np.ndarray) -> bool:
     """
     x, y = float(point_xy[0]), float(point_xy[1])
     n = len(vertices)
+    if n < 3:
+        return False
     inside = False
     j = n - 1
     for i in range(n):
@@ -223,6 +225,8 @@ class SectorZone:
             return False
         if not _check_altitude(position, self.altitude_min_m, self.altitude_max_m):
             return False
+        if dist < 1e-9:
+            return True  # At center — inside sector (altitude already checked)
         # Compass bearing: 0=North(+Y), clockwise
         bearing = math.degrees(math.atan2(dx, dy)) % 360.0
         az_min = _normalize_angle(self.azimuth_min_deg)
@@ -409,8 +413,11 @@ def _parse_zone_auth(value: str) -> ZoneAuth:
 def _resolve_center(zd: dict, geo_context: Any) -> np.ndarray:
     """Resolve zone center from ENU or geodetic coordinates."""
     if "center_geo" in zd and geo_context is not None:
-        lat, lon = zd["center_geo"][:2]
-        alt = zd["center_geo"][2] if len(zd["center_geo"]) > 2 else 0.0
+        cg = zd["center_geo"]
+        if len(cg) < 2:
+            return np.array(zd.get("center_xy", [0.0, 0.0]), dtype=float)
+        lat, lon = cg[:2]
+        alt = cg[2] if len(cg) > 2 else 0.0
         e, n, _u = geo_context.geodetic_to_enu(lat, lon, alt)
         return np.array([e, n])
     center = zd.get("center_xy", [0.0, 0.0])
@@ -422,9 +429,17 @@ def _resolve_vertices(zd: dict, geo_context: Any) -> np.ndarray:
     if "vertices_geo" in zd and geo_context is not None:
         verts = []
         for pt in zd["vertices_geo"]:
+            if len(pt) < 2:
+                continue  # Skip malformed points
             lat, lon = pt[:2]
             alt = pt[2] if len(pt) > 2 else 0.0
             e, n, _u = geo_context.geodetic_to_enu(lat, lon, alt)
             verts.append([e, n])
+        if len(verts) < 3:
+            return np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=float)
         return np.array(verts, dtype=float)
-    return np.array(zd.get("vertices", [[0, 0], [1, 0], [1, 1], [0, 1]]), dtype=float)
+    verts_raw = zd.get("vertices", [[0, 0], [1, 0], [1, 1], [0, 1]])
+    verts_arr = np.array(verts_raw, dtype=float)
+    if verts_arr.ndim != 2 or verts_arr.shape[1] < 2:
+        return np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=float)
+    return verts_arr
