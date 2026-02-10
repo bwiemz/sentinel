@@ -97,6 +97,57 @@
         <img id="hud-feed" alt="HUD Feed">
       </div>
     </section>
+
+    <!-- Row 4: Replay Controls -->
+    <section id="replay-panel" class="panel full-width" style="display:none">
+      <div class="panel-header">
+        TRACK HISTORY
+        <span id="replay-mode-label" class="mode-label live">LIVE</span>
+      </div>
+      <div class="panel-body replay-body">
+        <!-- Recording -->
+        <div class="replay-section">
+          <div class="replay-section-label">RECORD</div>
+          <div class="replay-row">
+            <span id="rec-indicator" class="rec-dot idle" title="IDLE"></span>
+            <button id="btn-rec-start" class="replay-btn">REC</button>
+            <button id="btn-rec-pause" class="replay-btn" disabled>PAUSE</button>
+            <button id="btn-rec-stop" class="replay-btn" disabled>STOP</button>
+            <span id="rec-frame-count" class="rec-count">0 frames</span>
+            <button id="btn-export" class="replay-btn" disabled>EXPORT</button>
+          </div>
+        </div>
+        <!-- Playback -->
+        <div class="replay-section">
+          <div class="replay-section-label">PLAYBACK</div>
+          <div class="replay-row">
+            <button id="btn-step-back" class="replay-btn" disabled>&#9664;&#9664;</button>
+            <button id="btn-play" class="replay-btn" disabled>&#9654; PLAY</button>
+            <button id="btn-pause" class="replay-btn" disabled>&#10074;&#10074;</button>
+            <button id="btn-stop-replay" class="replay-btn" disabled>&#9632; STOP</button>
+            <button id="btn-step-fwd" class="replay-btn" disabled>&#9654;&#9654;</button>
+            <select id="replay-speed" class="replay-speed">
+              <option value="0.25">0.25x</option>
+              <option value="0.5">0.5x</option>
+              <option value="1" selected>1x</option>
+              <option value="2">2x</option>
+              <option value="4">4x</option>
+              <option value="8">8x</option>
+            </select>
+          </div>
+        </div>
+        <!-- Timeline -->
+        <div class="replay-section">
+          <div class="replay-section-label">TIMELINE</div>
+          <div class="replay-timeline-row">
+            <span id="timeline-current" class="timeline-time">00:00</span>
+            <input type="range" id="timeline-slider" class="timeline-slider" min="0" max="0" value="0">
+            <span id="timeline-total" class="timeline-time">00:00</span>
+            <span id="timeline-frame" class="timeline-frame">0 / 0</span>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <!-- CRT scanline overlay -->
@@ -109,6 +160,7 @@
   <script src="/static/js/threat_panel.js"></script>
   <script src="/static/js/metrics_panel.js"></script>
   <script src="/static/js/hud_feed.js"></script>
+  <script src="/static/js/replay_controls.js"></script>
   <script src="/static/js/main.js"></script>
 </body>
 </html>

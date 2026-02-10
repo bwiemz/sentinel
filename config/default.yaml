@@ -348,6 +348,20 @@ sentinel:
     alt: 0.0
     name: ""
 
+  # ---------- Track History & Replay (Phase 22) ----------
+  history:
+    enabled: false                     # Enable track history recording
+    max_frames: 10000                  # Ring buffer capacity (frames)
+    capture_interval: 1                # Record every Nth pipeline frame
+    auto_record: false                 # Start recording on pipeline start
+    storage:
+      directory: "data/recordings"     # Export/import directory
+      format: "msgpack"                # "msgpack" or "json"
+      compression: false               # gzip compression for exports
+    replay:
+      default_speed: 1.0               # Initial playback speed multiplier
+      loop: false                      # Loop at end of recording
+
   # ---------- Engagement Zones (Phase 21) ----------
   engagement:
     enabled: false                     # Enable engagement zone system

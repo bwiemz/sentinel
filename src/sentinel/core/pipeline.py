@@ -210,6 +210,27 @@ class SentinelPipeline:
             except Exception:
                 logger.exception("Failed to initialize engagement system")
 
+        # --- Track History & Replay (Phase 22) ---
+        self._history_recorder = None
+        hist_cfg = config.sentinel.get("history", {})
+        if hist_cfg.get("enabled", False):
+            try:
+                from sentinel.history.config import HistoryConfig
+                from sentinel.history.recorder import HistoryRecorder
+
+                history_config = HistoryConfig.from_omegaconf(hist_cfg)
+                self._history_recorder = HistoryRecorder(history_config)
+                if history_config.auto_record:
+                    self._history_recorder.start()
+                logger.info(
+                    "History recording enabled (max_frames=%d, interval=%d, auto=%s)",
+                    history_config.max_frames,
+                    history_config.capture_interval,
+                    history_config.auto_record,
+                )
+            except Exception:
+                logger.exception("Failed to initialize history recorder")
+
         # --- Web Dashboard (Phase 10) ---
         web_cfg = config.sentinel.ui.get("web", {})
         self._web_dashboard = None
@@ -467,6 +488,8 @@ class SentinelPipeline:
             logger.info("Quantum illumination radar enabled.")
 
         if self._web_dashboard is not None:
+            if self._history_recorder is not None:
+                self._web_dashboard.set_history_recorder(self._history_recorder)
             self._web_dashboard.start()
 
         self._running = True
@@ -644,6 +667,13 @@ class SentinelPipeline:
                     )
                 except Exception:
                     logger.exception("Engagement evaluation failed")
+
+            # 4c. History recording (if enabled)
+            if self._history_recorder is not None:
+                try:
+                    self._history_recorder.record_frame(self)
+                except Exception:
+                    logger.debug("History recording failed", exc_info=True)
 
             # 5. Render HUD
             if self._hud is not None:
@@ -882,7 +912,16 @@ class SentinelPipeline:
         ew_cfg = self._config.sentinel.get("environment", {}).get("ew", {})
         status["ew_enabled"] = ew_cfg.get("enabled", False)
 
+        # History status (Phase 22)
+        status["history_enabled"] = self._history_recorder is not None
+        if self._history_recorder is not None:
+            status["history"] = self._history_recorder.get_status()
+
         return status
+
+    @property
+    def history_recorder(self):
+        return self._history_recorder
 
     def get_track_snapshot(self) -> list[Track]:
         return self._latest_tracks

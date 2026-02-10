@@ -552,6 +552,26 @@ class EngagementConfigSchema(BaseModel):
     model_config = {"extra": "allow"}
 
 
+class HistoryStorageConfigSchema(BaseModel):
+    directory: str = "data/recordings"
+    format: Literal["msgpack", "json"] = "msgpack"
+    compression: bool = False
+
+
+class HistoryReplayConfigSchema(BaseModel):
+    default_speed: float = Field(default=1.0, gt=0)
+    loop: bool = False
+
+
+class HistoryConfigSchema(BaseModel):
+    enabled: bool = False
+    max_frames: int = Field(default=10000, gt=0)
+    capture_interval: int = Field(default=1, gt=0)
+    auto_record: bool = False
+    storage: HistoryStorageConfigSchema = Field(default_factory=HistoryStorageConfigSchema)
+    replay: HistoryReplayConfigSchema = Field(default_factory=HistoryReplayConfigSchema)
+
+
 class SentinelRootConfig(BaseModel):
     system: SystemConfig = Field(default_factory=SystemConfig)
     time: TimeConfig = Field(default_factory=TimeConfig)
@@ -564,6 +584,7 @@ class SentinelRootConfig(BaseModel):
     roe: ROEConfigSchema = Field(default_factory=ROEConfigSchema)
     network: NetworkConfigSchema = Field(default_factory=NetworkConfigSchema)
     engagement: EngagementConfigSchema = Field(default_factory=EngagementConfigSchema)
+    history: HistoryConfigSchema = Field(default_factory=HistoryConfigSchema)
     ui: UIConfig = Field(default_factory=UIConfig)
     geo_reference: GeoReferenceConfig = Field(default_factory=GeoReferenceConfig)
 

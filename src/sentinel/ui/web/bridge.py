@@ -49,6 +49,18 @@ class WebDashboard:
         self._last_publish: float = 0.0
 
     # ------------------------------------------------------------------
+    # History / Replay wiring (Phase 22)
+    # ------------------------------------------------------------------
+
+    def set_history_recorder(self, recorder) -> None:
+        """Wire up history recorder and create replay controller."""
+        from sentinel.history.replay import ReplayController
+
+        self._app.state.history_recorder = recorder
+        replay_controller = ReplayController(state_buffer=self._buffer)
+        self._app.state.replay_controller = replay_controller
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 

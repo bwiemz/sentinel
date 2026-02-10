@@ -142,6 +142,7 @@
     if (now - lastSensorUpdate >= SENSOR_INTERVAL) {
       lastSensorUpdate = now;
       try { window.SensorPanel.update(currentData.status || {}); } catch (e) { console.error("SensorPanel:", e); }
+      try { window.ReplayControls.update(currentData.status || {}); } catch (e) { console.error("ReplayControls:", e); }
     }
 
     // Metrics panel — 2 Hz, inject measured render FPS

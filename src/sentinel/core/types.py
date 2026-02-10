@@ -156,6 +156,23 @@ class EngagementStatus(enum.Enum):
     ABORTED = "aborted"
 
 
+class RecordingState(enum.Enum):
+    """State of the history recorder."""
+
+    IDLE = "idle"
+    RECORDING = "recording"
+    PAUSED = "paused"
+
+
+class PlaybackState(enum.Enum):
+    """State of the replay controller."""
+
+    STOPPED = "stopped"
+    PLAYING = "playing"
+    PAUSED = "paused"
+    STEPPING = "stepping"
+
+
 class TrackState(enum.Enum):
     TENTATIVE = "tentative"
     CONFIRMED = "confirmed"

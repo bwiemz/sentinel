@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -109,6 +110,140 @@ def create_app(
             logger.info("WebSocket client disconnected")
         except Exception:
             logger.debug("WebSocket error", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # History & Replay endpoints (Phase 22)
+    # ------------------------------------------------------------------
+
+    @app.get("/api/history/status")
+    async def history_status():
+        recorder = getattr(app.state, "history_recorder", None)
+        if recorder is None:
+            return JSONResponse(content={"enabled": False})
+        return JSONResponse(content={"enabled": True, **recorder.get_status()})
+
+    @app.post("/api/history/start")
+    async def history_start():
+        recorder = getattr(app.state, "history_recorder", None)
+        if recorder is None:
+            return JSONResponse(content={"error": "History not enabled"}, status_code=400)
+        recorder.start()
+        return JSONResponse(content={"state": "recording"})
+
+    @app.post("/api/history/stop")
+    async def history_stop():
+        recorder = getattr(app.state, "history_recorder", None)
+        if recorder is None:
+            return JSONResponse(content={"error": "History not enabled"}, status_code=400)
+        recorder.stop()
+        return JSONResponse(content={"state": "idle"})
+
+    @app.post("/api/history/pause")
+    async def history_pause():
+        recorder = getattr(app.state, "history_recorder", None)
+        if recorder is None:
+            return JSONResponse(content={"error": "History not enabled"}, status_code=400)
+        recorder.pause()
+        return JSONResponse(content={"state": "paused"})
+
+    @app.post("/api/history/export")
+    async def history_export(request: Request):
+        recorder = getattr(app.state, "history_recorder", None)
+        if recorder is None:
+            return JSONResponse(content={"error": "History not enabled"}, status_code=400)
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            pass
+        filename = body.get("filename", f"recording_{int(time.time())}")
+
+        from sentinel.history.storage import HistoryStorage
+
+        storage_dir = Path("data/recordings")
+        filepath = storage_dir / f"{filename}.json"
+        HistoryStorage.save(recorder.buffer, filepath, fmt="json")
+        return JSONResponse(content={
+            "filepath": str(filepath),
+            "frames": recorder.buffer.frame_count,
+        })
+
+    @app.post("/api/history/import")
+    async def history_import(request: Request):
+        controller = getattr(app.state, "replay_controller", None)
+        if controller is None:
+            return JSONResponse(content={"error": "Replay not available"}, status_code=400)
+        body = await request.json()
+        filepath = body.get("filepath")
+        if not filepath:
+            return JSONResponse(content={"error": "filepath required"}, status_code=400)
+
+        from sentinel.history.storage import HistoryStorage
+
+        buf = HistoryStorage.load(filepath)
+        controller.load(buf)
+        return JSONResponse(content={
+            "frames": buf.frame_count,
+            "time_range": list(buf.time_range) if buf.time_range else None,
+        })
+
+    @app.post("/api/replay/play")
+    async def replay_play():
+        controller = getattr(app.state, "replay_controller", None)
+        if controller is None:
+            return JSONResponse(content={"error": "Replay not available"}, status_code=400)
+        controller.play()
+        return JSONResponse(content=controller.get_status())
+
+    @app.post("/api/replay/pause")
+    async def replay_pause():
+        controller = getattr(app.state, "replay_controller", None)
+        if controller is None:
+            return JSONResponse(content={"error": "Replay not available"}, status_code=400)
+        controller.pause()
+        return JSONResponse(content=controller.get_status())
+
+    @app.post("/api/replay/stop")
+    async def replay_stop():
+        controller = getattr(app.state, "replay_controller", None)
+        if controller is None:
+            return JSONResponse(content={"error": "Replay not available"}, status_code=400)
+        controller.stop()
+        return JSONResponse(content=controller.get_status())
+
+    @app.post("/api/replay/seek")
+    async def replay_seek(request: Request):
+        controller = getattr(app.state, "replay_controller", None)
+        if controller is None:
+            return JSONResponse(content={"error": "Replay not available"}, status_code=400)
+        body = await request.json()
+        if "frame" in body:
+            val = body["frame"]
+            if val == "__step_back__":
+                controller.step_backward()
+            elif val == "__step_fwd__":
+                controller.step_forward()
+            else:
+                controller.seek_to_frame(int(val))
+        elif "time" in body:
+            controller.seek_to_time(float(body["time"]))
+        return JSONResponse(content=controller.get_status())
+
+    @app.post("/api/replay/speed")
+    async def replay_speed(request: Request):
+        controller = getattr(app.state, "replay_controller", None)
+        if controller is None:
+            return JSONResponse(content={"error": "Replay not available"}, status_code=400)
+        body = await request.json()
+        controller.set_speed(float(body.get("speed", 1.0)))
+        return JSONResponse(content=controller.get_status())
+
+    @app.get("/api/replay/status")
+    async def replay_status():
+        controller = getattr(app.state, "replay_controller", None)
+        if controller is None:
+            return JSONResponse(content={"enabled": False})
+        return JSONResponse(content={"enabled": True, **controller.get_status()})
 
     return app
 
