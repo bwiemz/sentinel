@@ -231,6 +231,24 @@ class SentinelPipeline:
             except Exception:
                 logger.exception("Failed to initialize history recorder")
 
+        # --- Data Link / STANAG 5516 (Phase 23) ---
+        self._datalink_gateway = None
+        dl_cfg = config.sentinel.get("datalink", {})
+        if dl_cfg.get("enabled", False):
+            try:
+                from sentinel.datalink.gateway import DataLinkGateway
+
+                self._datalink_gateway = DataLinkGateway.from_config(
+                    dl_cfg,
+                    geo_context=self._geo_context if hasattr(self, '_geo_context') else None,
+                )
+                if self._datalink_gateway is not None:
+                    logger.info("Data link gateway enabled (source=%s, rate=%.1f Hz)",
+                                dl_cfg.get("source_id", "SENTINEL-01"),
+                                dl_cfg.get("publish_rate_hz", 1.0))
+            except Exception:
+                logger.exception("Failed to initialize data link gateway")
+
         # --- Web Dashboard (Phase 10) ---
         web_cfg = config.sentinel.ui.get("web", {})
         self._web_dashboard = None
@@ -675,6 +693,15 @@ class SentinelPipeline:
                 except Exception:
                     logger.debug("History recording failed", exc_info=True)
 
+            # 4d. Data link publishing (if enabled)
+            if self._datalink_gateway is not None:
+                try:
+                    tracks_to_publish = self._latest_enhanced_fused or self._latest_fused_tracks or []
+                    self._datalink_gateway.publish_tracks(tracks_to_publish, timestamp)
+                    self._datalink_gateway.process_incoming()
+                except Exception:
+                    logger.debug("Data link gateway failed", exc_info=True)
+
             # 5. Render HUD
             if self._hud is not None:
                 try:
@@ -917,11 +944,20 @@ class SentinelPipeline:
         if self._history_recorder is not None:
             status["history"] = self._history_recorder.get_status()
 
+        # Data link status (Phase 23)
+        status["datalink_enabled"] = self._datalink_gateway is not None
+        if self._datalink_gateway is not None:
+            status["datalink"] = self._datalink_gateway.get_stats()
+
         return status
 
     @property
     def history_recorder(self):
         return self._history_recorder
+
+    @property
+    def datalink_gateway(self):
+        return self._datalink_gateway
 
     def get_track_snapshot(self) -> list[Track]:
         return self._latest_tracks

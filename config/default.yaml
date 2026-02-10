@@ -362,6 +362,20 @@ sentinel:
       default_speed: 1.0               # Initial playback speed multiplier
       loop: false                      # Loop at end of recording
 
+  # ---------- Data Link / STANAG 5516 (Phase 23) ----------
+  datalink:
+    enabled: false                     # Enable Link 16 data link gateway
+    source_id: "SENTINEL-01"           # Source unit identifier
+    transport_type: "in_memory"        # in_memory (simulated) or future: udp
+    publish_rate_hz: 1.0               # Max outbound message rate (Hz)
+    publish_iff: true                  # Publish J7.0 IFF messages
+    publish_engagement: true           # Publish J3.5 engagement messages
+    validate_outbound: true            # Validate outbound messages
+    validate_inbound: true             # Validate inbound messages
+    max_track_numbers: 8192            # Max 13-bit track number pool
+    accept_inbound: true               # Accept inbound Link 16 messages
+    merge_with_local: false            # Merge inbound tracks with local fusion
+
   # ---------- Engagement Zones (Phase 21) ----------
   engagement:
     enabled: false                     # Enable engagement zone system

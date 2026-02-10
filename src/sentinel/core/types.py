@@ -173,6 +173,28 @@ class PlaybackState(enum.Enum):
     STEPPING = "stepping"
 
 
+class L16Identity(enum.Enum):
+    """Link 16 track identity (3-bit, STANAG 5516)."""
+
+    PENDING = "pending"
+    UNKNOWN = "unknown"
+    ASSUMED_FRIEND = "assumed_friend"
+    FRIEND = "friend"
+    NEUTRAL = "neutral"
+    SUSPECT = "suspect"
+    HOSTILE = "hostile"
+    JOKER = "joker"
+
+
+class L16MessageType(enum.Enum):
+    """Link 16 J-series message types."""
+
+    J2_2 = "J2.2"
+    J3_2 = "J3.2"
+    J3_5 = "J3.5"
+    J7_0 = "J7.0"
+
+
 class TrackState(enum.Enum):
     TENTATIVE = "tentative"
     CONFIRMED = "confirmed"

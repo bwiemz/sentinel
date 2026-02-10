@@ -572,6 +572,20 @@ class HistoryConfigSchema(BaseModel):
     replay: HistoryReplayConfigSchema = Field(default_factory=HistoryReplayConfigSchema)
 
 
+class DataLinkConfigSchema(BaseModel):
+    enabled: bool = False
+    source_id: str = "SENTINEL-01"
+    transport_type: str = "in_memory"
+    publish_rate_hz: float = Field(default=1.0, gt=0)
+    publish_iff: bool = True
+    publish_engagement: bool = True
+    validate_outbound: bool = True
+    validate_inbound: bool = True
+    max_track_numbers: int = Field(default=8192, gt=0, le=8192)
+    accept_inbound: bool = True
+    merge_with_local: bool = False
+
+
 class SentinelRootConfig(BaseModel):
     system: SystemConfig = Field(default_factory=SystemConfig)
     time: TimeConfig = Field(default_factory=TimeConfig)
@@ -585,6 +599,7 @@ class SentinelRootConfig(BaseModel):
     network: NetworkConfigSchema = Field(default_factory=NetworkConfigSchema)
     engagement: EngagementConfigSchema = Field(default_factory=EngagementConfigSchema)
     history: HistoryConfigSchema = Field(default_factory=HistoryConfigSchema)
+    datalink: DataLinkConfigSchema = Field(default_factory=DataLinkConfigSchema)
     ui: UIConfig = Field(default_factory=UIConfig)
     geo_reference: GeoReferenceConfig = Field(default_factory=GeoReferenceConfig)
 
