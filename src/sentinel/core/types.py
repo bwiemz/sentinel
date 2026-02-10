@@ -96,6 +96,35 @@ class EngagementAuth(enum.Enum):
     HOLD_FIRE = "hold_fire"
 
 
+class NodeRole(enum.Enum):
+    """Role of a node in the tactical network."""
+
+    SENSOR = "sensor"
+    FUSION_CENTER = "fusion_center"
+    COMMAND = "command"
+    RELAY = "relay"
+
+
+class NodeState(enum.Enum):
+    """State of a network node."""
+
+    JOINING = "joining"
+    ACTIVE = "active"
+    DEGRADED = "degraded"
+    OFFLINE = "offline"
+
+
+class MessageType(enum.Enum):
+    """Tactical network message types (Link 16 J-series inspired)."""
+
+    TRACK_REPORT = "track_report"
+    DETECTION_REPORT = "detection_report"
+    IFF_REPORT = "iff_report"
+    ENGAGEMENT_STATUS = "engagement_status"
+    HEARTBEAT = "heartbeat"
+    SENSOR_STATUS = "sensor_status"
+
+
 class TrackState(enum.Enum):
     TENTATIVE = "tentative"
     CONFIRMED = "confirmed"

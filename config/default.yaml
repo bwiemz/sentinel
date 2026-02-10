@@ -348,6 +348,34 @@ sentinel:
     alt: 0.0
     name: ""
 
+  # ---------- Network Integration (Phase 20) ----------
+  network:
+    enabled: false                     # Enable tactical mesh networking
+    node_id: "LOCAL"                   # Unique node identifier
+    role: "sensor"                     # sensor/fusion_center/command/relay
+    capabilities: []                   # Auto-detected from active sensors
+    transport:
+      type: "simulated"               # simulated (in-process mesh)
+      latency_ms: 5.0                 # Base one-way latency (ms)
+      jitter_ms: 2.0                  # Random jitter +/- (ms)
+      packet_loss_rate: 0.0           # Drop probability 0.0-1.0
+      bandwidth_bps: 10000000         # 10 Mbps (TTNT-class)
+      reorder_probability: 0.0        # Out-of-order delivery probability
+    pubsub:
+      track_publish_hz: 1.0           # Track report publish rate
+      detection_publish_hz: 10.0      # Detection report publish rate
+      heartbeat_interval_s: 2.0       # Node heartbeat interval
+      history_depth: 5                # Messages retained per topic
+      message_lifespan_s: 10.0        # Auto-expire stale messages
+    discovery:
+      auto_discover: true             # Automatic peer discovery
+      heartbeat_timeout_s: 6.0        # Peer offline after 3x heartbeat
+    composite_fusion:
+      enabled: true                   # Merge remote tracks with local
+      distance_gate: 50.0             # Mahalanobis distance gate
+      stale_threshold_s: 5.0          # Discard remote tracks older than this
+      prefer_local: true              # Bias toward local track positions
+
   ui:
     hud:
       enabled: true

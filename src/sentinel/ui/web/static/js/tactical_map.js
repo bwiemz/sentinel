@@ -25,6 +25,10 @@ window.TacticalMap = (function () {
     iff_assumed_hostile: "#ff5000",
     iff_spoof: "#c800c8",
     iff_pending: "#888888",
+    network_node: "#00a0ff",
+    network_link_good: "#00c800",
+    network_link_degraded: "#ffc800",
+    network_link_offline: "#ff0000",
   };
 
   function resize() {

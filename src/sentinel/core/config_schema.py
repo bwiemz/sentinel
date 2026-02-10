@@ -453,6 +453,48 @@ class TimeConfig(BaseModel):
     start_epoch: float = Field(default=1_000_000.0, gt=0)
 
 
+class NetworkTransportConfig(BaseModel):
+    type: str = "simulated"
+    latency_ms: float = Field(default=5.0, ge=0)
+    jitter_ms: float = Field(default=2.0, ge=0)
+    packet_loss_rate: float = Field(default=0.0, ge=0, le=1)
+    bandwidth_bps: float = Field(default=10_000_000, gt=0)
+    reorder_probability: float = Field(default=0.0, ge=0, le=1)
+
+
+class NetworkPubSubConfig(BaseModel):
+    track_publish_hz: float = Field(default=1.0, gt=0)
+    detection_publish_hz: float = Field(default=10.0, gt=0)
+    heartbeat_interval_s: float = Field(default=2.0, gt=0)
+    history_depth: int = Field(default=5, gt=0)
+    message_lifespan_s: float = Field(default=10.0, gt=0)
+
+
+class NetworkDiscoveryConfig(BaseModel):
+    auto_discover: bool = True
+    heartbeat_timeout_s: float = Field(default=6.0, gt=0)
+
+
+class NetworkCompositeFusionConfig(BaseModel):
+    enabled: bool = True
+    distance_gate: float = Field(default=50.0, gt=0)
+    stale_threshold_s: float = Field(default=5.0, gt=0)
+    prefer_local: bool = True
+
+
+class NetworkConfigSchema(BaseModel):
+    enabled: bool = False
+    node_id: str = "LOCAL"
+    role: str = "sensor"
+    capabilities: list[str] = Field(default_factory=list)
+    transport: NetworkTransportConfig = Field(default_factory=NetworkTransportConfig)
+    pubsub: NetworkPubSubConfig = Field(default_factory=NetworkPubSubConfig)
+    discovery: NetworkDiscoveryConfig = Field(default_factory=NetworkDiscoveryConfig)
+    composite_fusion: NetworkCompositeFusionConfig = Field(
+        default_factory=NetworkCompositeFusionConfig
+    )
+
+
 class SentinelRootConfig(BaseModel):
     system: SystemConfig = Field(default_factory=SystemConfig)
     time: TimeConfig = Field(default_factory=TimeConfig)
@@ -463,6 +505,7 @@ class SentinelRootConfig(BaseModel):
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     iff: IFFConfigSchema = Field(default_factory=IFFConfigSchema)
     roe: ROEConfigSchema = Field(default_factory=ROEConfigSchema)
+    network: NetworkConfigSchema = Field(default_factory=NetworkConfigSchema)
     ui: UIConfig = Field(default_factory=UIConfig)
     geo_reference: GeoReferenceConfig = Field(default_factory=GeoReferenceConfig)
 
