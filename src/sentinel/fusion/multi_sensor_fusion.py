@@ -60,6 +60,9 @@ class EnhancedFusedTrack(FusedTrack):
     iff_spoof_suspect: bool = False
     # Rules of Engagement
     engagement_auth: str = "weapons_hold"
+    # Engagement zones (Phase 21)
+    zone_authorization: str = "weapons_free"
+    engagement_feasibility: dict | None = None
 
     @property
     def sensor_count(self) -> int:

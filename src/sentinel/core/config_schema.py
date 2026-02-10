@@ -495,6 +495,63 @@ class NetworkConfigSchema(BaseModel):
     )
 
 
+class EngagementZoneConfigSchema(BaseModel):
+    type: str = "circle"
+    zone_id: str = ""
+    name: str = ""
+    center_xy: list[float] = Field(default_factory=lambda: [0.0, 0.0])
+    radius_m: float = Field(default=10000.0, gt=0)
+    inner_radius_m: float = Field(default=0.0, ge=0)
+    outer_radius_m: float = Field(default=10000.0, gt=0)
+    vertices: list[list[float]] = Field(default_factory=list)
+    azimuth_min_deg: float = 0.0
+    azimuth_max_deg: float = 360.0
+    authorization: str = "weapons_free"
+    altitude_min_m: float = Field(default=0.0, ge=0)
+    altitude_max_m: float = Field(default=30000.0, gt=0)
+    priority: int = Field(default=0, ge=0)
+
+    model_config = {"extra": "allow"}
+
+
+class WeaponProfileConfigSchema(BaseModel):
+    weapon_id: str = ""
+    name: str = ""
+    weapon_type: str = "sam_medium"
+    position_xy: list[float] = Field(default_factory=lambda: [0.0, 0.0])
+    altitude_m: float = Field(default=0.0, ge=0)
+    min_range_m: float = Field(default=500.0, ge=0)
+    max_range_m: float = Field(default=20000.0, gt=0)
+    optimal_range_m: float = Field(default=10000.0, gt=0)
+    min_altitude_m: float = Field(default=100.0, ge=0)
+    max_altitude_m: float = Field(default=20000.0, gt=0)
+    max_target_speed_mps: float = Field(default=800.0, gt=0)
+    weapon_speed_mps: float = Field(default=1200.0, gt=0)
+    pk_base: float = Field(default=0.85, ge=0, le=1)
+    pk_range_falloff: float = Field(default=2.0, gt=0)
+    pk_speed_penalty: float = Field(default=0.3, ge=0, le=1)
+    pk_ecm_penalty: float = Field(default=0.3, ge=0, le=1)
+    max_simultaneous_engagements: int = Field(default=2, gt=0)
+    rounds_remaining: int = Field(default=10, ge=0)
+    salvo_size: int = Field(default=1, gt=0)
+    reload_time_s: float = Field(default=5.0, ge=0)
+
+    model_config = {"extra": "allow"}
+
+
+class EngagementConfigSchema(BaseModel):
+    enabled: bool = False
+    pk_weight: float = Field(default=0.4, ge=0, le=1)
+    tti_weight: float = Field(default=0.3, ge=0, le=1)
+    threat_weight: float = Field(default=0.3, ge=0, le=1)
+    max_tti_s: float = Field(default=120.0, gt=0)
+    default_zone_auth: str = "weapons_free"
+    zones: list[EngagementZoneConfigSchema] = Field(default_factory=list)
+    weapons: list[WeaponProfileConfigSchema] = Field(default_factory=list)
+
+    model_config = {"extra": "allow"}
+
+
 class SentinelRootConfig(BaseModel):
     system: SystemConfig = Field(default_factory=SystemConfig)
     time: TimeConfig = Field(default_factory=TimeConfig)
@@ -506,6 +563,7 @@ class SentinelRootConfig(BaseModel):
     iff: IFFConfigSchema = Field(default_factory=IFFConfigSchema)
     roe: ROEConfigSchema = Field(default_factory=ROEConfigSchema)
     network: NetworkConfigSchema = Field(default_factory=NetworkConfigSchema)
+    engagement: EngagementConfigSchema = Field(default_factory=EngagementConfigSchema)
     ui: UIConfig = Field(default_factory=UIConfig)
     geo_reference: GeoReferenceConfig = Field(default_factory=GeoReferenceConfig)
 

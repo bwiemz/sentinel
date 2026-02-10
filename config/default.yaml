@@ -348,6 +348,17 @@ sentinel:
     alt: 0.0
     name: ""
 
+  # ---------- Engagement Zones (Phase 21) ----------
+  engagement:
+    enabled: false                     # Enable engagement zone system
+    pk_weight: 0.4                     # Pk weight in assignment cost
+    tti_weight: 0.3                    # TTI weight in assignment cost
+    threat_weight: 0.3                 # Threat priority weight in cost
+    max_tti_s: 120.0                   # TTI normalization ceiling (seconds)
+    default_zone_auth: "weapons_free"  # Default zone authorization
+    zones: []                          # List of zone definitions
+    weapons: []                        # List of weapon profiles
+
   # ---------- Network Integration (Phase 20) ----------
   network:
     enabled: false                     # Enable tactical mesh networking

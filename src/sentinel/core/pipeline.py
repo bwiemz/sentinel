@@ -192,6 +192,24 @@ class SentinelPipeline:
         if self._multifreq_radar_enabled or self._thermal_enabled or self._quantum_radar_enabled:
             self._init_multi_sensor_fusion(config)
 
+        # --- Engagement Zones (Phase 21) ---
+        self._engagement_manager = None
+        self._latest_engagement_plan = None
+        eng_cfg = config.sentinel.get("engagement", {})
+        if eng_cfg.get("enabled", False):
+            try:
+                from sentinel.engagement.manager import EngagementManager
+                self._engagement_manager = EngagementManager.from_config(
+                    eng_cfg,
+                    geo_context=self._geo_context if hasattr(self, '_geo_context') else None,
+                )
+                if self._engagement_manager is not None:
+                    logger.info("Engagement zone system enabled with %d zones, %d weapons",
+                                len(self._engagement_manager.zone_manager.get_all_zones()),
+                                len(self._engagement_manager.weapons))
+            except Exception:
+                logger.exception("Failed to initialize engagement system")
+
         # --- Web Dashboard (Phase 10) ---
         web_cfg = config.sentinel.ui.get("web", {})
         self._web_dashboard = None
@@ -617,6 +635,16 @@ class SentinelPipeline:
                 logger.exception("Fusion failed")
                 self._sensor_health["fusion"].record_error()
 
+            # 4b. Engagement evaluation (if enabled)
+            if self._engagement_manager is not None and self._latest_enhanced_fused:
+                try:
+                    self._latest_engagement_plan = self._engagement_manager.evaluate(
+                        self._latest_enhanced_fused,
+                        current_time=timestamp,
+                    )
+                except Exception:
+                    logger.exception("Engagement evaluation failed")
+
             # 5. Render HUD
             if self._hud is not None:
                 try:
@@ -841,6 +869,14 @@ class SentinelPipeline:
         if status["network_enabled"]:
             status["network_node_id"] = net_cfg.get("node_id", "LOCAL")
             status["network_role"] = net_cfg.get("role", "sensor")
+
+        # Engagement status (Phase 21)
+        status["engagement_enabled"] = self._engagement_manager is not None
+        if self._engagement_manager is not None and self._latest_engagement_plan is not None:
+            plan = self._latest_engagement_plan
+            status["engagement_assignments"] = len(plan.assignment.assignments)
+            status["engagement_zones"] = len(self._engagement_manager.zone_manager.get_all_zones())
+            status["engagement_weapons"] = len(self._engagement_manager.weapons)
 
         # EW status (Phase 13)
         ew_cfg = self._config.sentinel.get("environment", {}).get("ew", {})

@@ -125,6 +125,37 @@ class MessageType(enum.Enum):
     SENSOR_STATUS = "sensor_status"
 
 
+class ZoneAuth(enum.Enum):
+    """Geographic zone engagement authorization."""
+
+    NO_FIRE = "no_fire"
+    RESTRICTED_FIRE = "restricted_fire"
+    SELF_DEFENSE_ONLY = "self_defense_only"
+    WEAPONS_FREE = "weapons_free"
+
+
+class WeaponType(enum.Enum):
+    """Weapon system categories."""
+
+    SAM_SHORT = "sam_short"
+    SAM_MEDIUM = "sam_medium"
+    SAM_LONG = "sam_long"
+    AAM_SHORT = "aam_short"
+    AAM_MEDIUM = "aam_medium"
+    CIWS = "ciws"
+    GUN = "gun"
+
+
+class EngagementStatus(enum.Enum):
+    """Status of an engagement assignment."""
+
+    FEASIBLE = "feasible"
+    INFEASIBLE = "infeasible"
+    IN_PROGRESS = "in_progress"
+    COMPLETE = "complete"
+    ABORTED = "aborted"
+
+
 class TrackState(enum.Enum):
     TENTATIVE = "tentative"
     CONFIRMED = "confirmed"
