@@ -4,7 +4,7 @@
 
 SENTINEL is an unclassified, educational multi-sensor tracking and fusion framework. It demonstrates real-time track management, multi-target association, sensor fusion, and visualization using simulated sensor models and publicly available algorithms. No classified data, threat libraries, or real-world military interfaces are used.
 
-> **⚠️ Simulation Only** -- This project is a learning, research, and portfolio demonstration. It is not intended for real-world deployment, and all sensor models, message formats, and decision logic are simplified educational implementations.
+> **⚠️ Simulation Only** -- This project is a learning, research, and portfolio demonstration. It is not intended for real-world deployment, and all sensor models, message formats, and decision logic are simplified educational implementations using simulated and publicly available sensor analogs.
 
 ## License & Usage
 
