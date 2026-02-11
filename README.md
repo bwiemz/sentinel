@@ -1,8 +1,10 @@
 # SENTINEL
 
-**Sensor-Enhanced Networked Tracking, Intelligence, and Engagement Library**
+**Multi-Sensor Tracking & Fusion Simulation Framework**
 
-Real-time multi-sensor tracking system that fuses camera, multi-frequency radar, thermal imaging, and quantum illumination radar to detect, classify, and engage targets -- including stealth aircraft and hypersonic vehicles. Features tactical mesh networking, Link 16 data link interoperability, engagement zones with weapon-target assignment, IFF identification, rules of engagement, track history replay, and a real-time web dashboard.
+SENTINEL is an unclassified, educational multi-sensor tracking and fusion framework. It demonstrates real-time track management, multi-target association, sensor fusion, and visualization using simulated sensor models and publicly available algorithms. No classified data, threat libraries, or real-world military interfaces are used.
+
+> **⚠️ Simulation Only** — This project is a learning, research, and portfolio demonstration. It is not intended for real-world deployment, and all sensor models, message formats, and decision logic are simplified educational implementations.
 
 ## License & Usage
 
@@ -32,26 +34,26 @@ Quantum Radar ──> RadarTrackManager (EKF) ───────────�
   (QI X-band)       (reuses existing EKF)                                             │
                                                                           ┌───────────┼───────────┐
                                                                           ▼           ▼           ▼
-                                                                    IFF/ROE    Engagement   ThreatClassifier
-                                                                  (identify)  (WEZ/Pk/TTI)   (ML/rules)
+                                                                    IFF Model    Decision     ThreatClassifier
+                                                                  (simulated)  Logic (sim)    (ML/rules)
                                                                           │           │           │
                                                                           └───────────┼───────────┘
                                                                                       ▼
                                                                     ┌─────────────────┼─────────────────┐
                                                                     ▼                 ▼                 ▼
                                                                HUD Overlay   History Recorder   DataLink Gateway
-                                                              (MIL-STD-1472)  (ring buffer)     (Link 16 J-series)
+                                                              (styled UI)    (ring buffer)    (simulated formats)
                                                                     │                 │                 │
                                                                     ▼                 ▼                 ▼
-                                                              Web Dashboard    File Export       External C2
-                                                             (FastAPI/WS)     (msgpack/JSON)    (STANAG 5516)
+                                                              Web Dashboard    File Export      Simulated C2
+                                                             (FastAPI/WS)     (msgpack/JSON)   (toy protocols)
                                                                     │
                                                                     ▼
-                                                           Tactical Mesh Network
-                                                          (CEC composite tracking)
+                                                           Mesh Network (simulated)
+                                                          (composite tracking demo)
 ```
 
-Four independent sensor paths run at their native rates. Tracks are fused by angular correspondence or statistical (Mahalanobis) distance, with optional temporal alignment to a common epoch. Data association uses either the Hungarian algorithm (hard assignment) or JPDA (soft probabilistic assignment). Fused tracks are enriched with IFF identification, engagement authorization, and threat classification before being distributed via HUD, web dashboard, track history, tactical mesh network, and Link 16 data link.
+Four independent sensor paths run at their native rates. Tracks are fused by angular correspondence or statistical (Mahalanobis) distance, with optional temporal alignment to a common epoch. Data association uses either the Hungarian algorithm (hard assignment) or JPDA (soft probabilistic assignment). Fused tracks are enriched with simulated IFF identification, decision-support logic, and threat classification before being distributed via HUD, web dashboard, track history, simulated mesh network, and a simulated data-link gateway.
 
 ## Key Capabilities
 
@@ -59,9 +61,9 @@ Four independent sensor paths run at their native rates. Tracks are fused by ang
 - **Object detection**: YOLOv8 on camera frames (USB, RTSP, or video file)
 - **Multi-frequency radar**: 5-band simulation (VHF/UHF/L/S/X) with frequency-dependent RCS, plasma sheath attenuation modeling
 - **Thermal imaging**: Passive FLIR simulation (MWIR/LWIR) with bearing-only tracking -- no range, unaffected by plasma
-- **Quantum illumination radar**: Entangled microwave photon pairs (TMSV state) for enhanced stealth detection at X-band. OPA/SFG/Phase-Conjugate receiver models. 6 dB SNR advantage over classical at same energy budget
-- **Stealth detection**: Cross-band RCS variation flags stealth candidates (RAM absorbs X-band but not VHF/UHF)
-- **Hypersonic detection**: Mach 5+ targets create extreme thermal signatures (>1500K) that thermal sensors always detect, even when radar is degraded by plasma sheath
+- **Quantum illumination radar**: Simplified QI-inspired detection model using entangled microwave photon pairs (TMSV state) for educational exploration of enhanced detection concepts. OPA/SFG/Phase-Conjugate receiver models (not a validated real-world model)
+- **Stealth detection scenario**: Cross-band RCS variation flags stealth candidates in simulation (RAM absorbs X-band but not VHF/UHF)
+- **Hypersonic detection scenario**: Simulated Mach 5+ targets create extreme thermal signatures (>1500K) that thermal sensors always detect, even when radar is degraded by plasma sheath
 
 ### Tracking & Fusion
 - **Kalman filter tracking**: Predict-update cycle with automatic track lifecycle (tentative -> confirmed -> coasting -> deleted). Filter types: KF, EKF, CA-KF, IMM
@@ -72,25 +74,39 @@ Four independent sensor paths run at their native rates. Tracks are fused by ang
 - **Threat classification**: Rule-based or ML classifier with kinematic intent estimation. CRITICAL/HIGH/MEDIUM/LOW threat levels
 - **C++ acceleration**: Optional pybind11+Eigen for batch cost matrix computation, geodetic transforms, and association -- transparent fallback to Python
 
-### Identification & Engagement
-- **IFF identification**: Mode 3/A, Mode C, Mode S, Mode 4/5 interrogation with spoof detection (code consistency, kinematic plausibility, encryption validation)
-- **Rules of engagement**: Configurable ROE engine mapping IFF + threat level to engagement authorization (weapons_free/weapons_tight/weapons_hold/hold_fire)
-- **Engagement zones**: 4 zone types (circular, polygon, annular, sector) with priority-based authorization resolution
-- **Weapon-target assignment**: Weapon Engagement Zones (WEZ), Pk/TTI feasibility scoring, Hungarian algorithm optimal assignment across multiple weapon platforms
+### Simulated Identification & Decision Logic
+- **IFF modeling**: Simulated interrogation modes (Mode 3/A, C, S, 4/5) with spoof-detection heuristics (code consistency, kinematic plausibility, encryption validation)
+- **Decision-support logic**: Configurable rule engine mapping IFF + threat level to simulated authorization states (weapons_free/weapons_tight/weapons_hold/hold_fire) — simulation-only tasking demo
+- **Engagement zones**: 4 zone types (circular, polygon, annular, sector) with priority-based resolution — for simulation scenarios only
+- **Weapon-target assignment**: Simulated Weapon Engagement Zones (WEZ), Pk/TTI feasibility scoring, Hungarian algorithm optimal assignment across multiple simulated weapon platforms
 
-### Networking & Interoperability
-- **Tactical mesh networking**: CEC-inspired composite tracking with pub/sub messaging, automatic peer discovery, and multi-node track fusion
-- **Link 16 data link**: STANAG 5516 J-series gateway (J2.2 Air Track, J3.2 Track Mgmt, J3.5 Engagement, J7.0 IFF) with bit-level binary encoding, bidirectional conversion, and STANAG field validation
-- **Real-world coordinates**: WGS84 geodetic reference with ENU<->geodetic conversion (GeoContext), C++ accelerated
+### Networking & Data Exchange (Simulated)
+- **Mesh networking**: Composite tracking demo inspired by CEC concepts, with pub/sub messaging, automatic peer discovery, and multi-node track fusion — all in simulation
+- **Data-link gateway**: Simulated J-series message formats (J2.2, J3.2, J3.5, J7.0) with bit-level binary encoding, bidirectional conversion, and field validation — toy protocol, not a real-world interface
+- **Real-world coordinates**: WGS84 geodetic reference with ENU↔geodetic conversion (GeoContext), C++ accelerated
 
-### Environment & Electronic Warfare
+### Environment & Electronic Warfare (Simulated)
 - **Terrain & environment**: 2D elevation grid with ray-marching line-of-sight, ITU-R P.676/P.838 atmospheric propagation (frequency-dependent), weather effects, surface/rain clutter models
-- **Electronic warfare**: Noise jamming, deceptive jamming (RGPO), chaff clouds, expendable decoys. ECCM: sidelobe blanking, frequency agility, burn-through, QI ECCM (entangled photons resist noise jamming)
+- **Electronic warfare**: Simulated noise jamming, deceptive jamming (RGPO), chaff clouds, expendable decoys. ECCM models: sidelobe blanking, frequency agility, burn-through, QI ECCM (entangled photons resist noise jamming)
 
 ### Visualization & Recording
-- **Military HUD**: Real-time overlay with track boxes, velocity vectors, targeting reticle, radar/thermal/quantum blips, threat badges, and stealth/hypersonic alert banners (MIL-STD-1472 styling)
-- **Web dashboard**: Real-time browser-based monitoring via FastAPI/WebSocket -- tactical PPI radar scope, sortable track table, threat cards, per-stage latency bars, MJPEG HUD video feed, replay controls. Military dark theme, vanilla JS (no build step)
-- **Track history & replay**: Ring buffer recording with configurable capture interval, msgpack/JSON export with gzip compression, playback with speed control (0.25x-8x), seek, and web UI
+- **HUD overlay**: Real-time overlay with track boxes, velocity vectors, targeting reticle, radar/thermal/quantum blips, threat badges, and alert banners (military-style dark theme)
+- **Web dashboard**: Real-time browser-based monitoring via FastAPI/WebSocket — tactical PPI radar scope, sortable track table, threat cards, per-stage latency bars, MJPEG HUD video feed, replay controls. Dark theme, vanilla JS (no build step)
+- **Track history & replay**: Ring buffer recording with configurable capture interval, msgpack/JSON export with gzip compression, playback with speed control (0.25x–8x), seek, and web UI
+
+## Portfolio / Technical Highlights
+
+| Aspect | Detail |
+|--------|--------|
+| **Real-time pipeline** | Camera → detection → tracking → fusion → HUD at 30 Hz; radar/thermal/QI paths run at independent native rates |
+| **Algorithms implemented** | KF, EKF, CA-KF, IMM, Hungarian algorithm, JPDA, Mahalanobis gating, NIS consistency monitoring |
+| **Multi-sensor fusion** | 4 independent sensor paths fused by angular correspondence and statistical distance with temporal alignment |
+| **ML integration** | scikit-learn threat classifier, kinematic intent estimator, feature extraction pipeline with training harness |
+| **C++ acceleration** | Optional pybind11 + Eigen for batch cost matrix computation, geodetic transforms — transparent Python fallback |
+| **Web dashboard** | FastAPI + WebSocket real-time UI with PPI radar scope, sortable track table, latency metrics, MJPEG video feed |
+| **Test coverage** | 2,181 tests — unit (~1,900), integration (~130), scenario validation (~100), plus performance benchmarks |
+| **Tech stack** | Python 3.10+, NumPy, SciPy, OpenCV, Ultralytics (YOLOv8), FastAPI, pybind11/Eigen, scikit-learn |
+| **Architecture** | Clean separation of concerns: sensors, detection, tracking, fusion, classification, visualization — all independently configurable |
 
 ### Web Dashboard
 
@@ -154,13 +170,13 @@ All settings live in `config/default.yaml` under the `sentinel:` namespace. Key 
 | `tracking.quantum_radar` | EKF params for quantum radar tracking |
 | `fusion` | Azimuth gates, temporal alignment, statistical distance, threat classification |
 | `environment` | Terrain masking, atmospheric propagation, weather, clutter, EW |
-| `iff` | IFF interrogation modes, spoof detection, range limits |
-| `roe` | Rules of engagement postures and overrides |
+| `iff` | Simulated IFF interrogation modes, spoof detection, range limits |
+| `roe` | Decision-support rule engine postures and overrides |
 | `geo_reference` | WGS84 reference point (lat/lon/alt) for geodetic output |
-| `network` | Tactical mesh networking: node ID, role, transport, pub/sub, composite fusion |
-| `engagement` | Engagement zones, weapon profiles, Pk/TTI/threat weights |
+| `network` | Mesh networking: node ID, role, transport, pub/sub, composite fusion |
+| `engagement` | Simulated engagement zones, weapon profiles, Pk/TTI/threat weights |
 | `history` | Track history recording: buffer size, capture interval, storage format, replay |
-| `datalink` | Link 16 gateway: publish rate, validation, track number pool, inbound handling |
+| `datalink` | Data-link gateway: publish rate, validation, track number pool, inbound handling |
 | `ui.hud` | HUD colors, overlay alpha, scanline effect |
 | `ui.web` | Web dashboard: host, port, update rate, video FPS |
 
@@ -281,9 +297,9 @@ sentinel/
     benchmarks/test_*.py        # Performance benchmarks
 ```
 
-## Physics Models
+## Physics Models (Simplified / Educational)
 
-### Frequency-Dependent RCS (Stealth)
+### Frequency-Dependent RCS (Simulation)
 
 Stealth materials (RAM) are optimized for X-band absorption. At lower frequencies, the RCS increases dramatically:
 
@@ -297,7 +313,7 @@ Stealth materials (RAM) are optimized for X-band absorption. At lower frequencie
 
 A target with -20 dBsm at X-band appears as +5 dBsm at VHF -- easily detectable. The `MultiFreqCorrelator` flags targets with >15 dB RCS variation across bands as stealth candidates.
 
-### Plasma Sheath (Hypersonic)
+### Plasma Sheath Model (Hypersonic Simulation)
 
 At Mach 5+, aerodynamic heating ionizes the surrounding air. This plasma sheath attenuates radar returns, with higher frequencies affected more:
 
@@ -307,19 +323,19 @@ attenuation_db = base_atten * (1 + freq_factor) * mach_factor^2
 
 Where `freq_factor` ranges from 0.3 (VHF) to 2.0 (X-band). VHF penetrates plasma better, but all radar is degraded.
 
-### Thermal Signatures
+### Thermal Signatures (Simulation Model)
 
-Thermal imaging is **not affected by plasma** -- it's a passive sensor measuring emitted IR radiation. Hypersonic leading edges reach 1650-2760C from aerodynamic heating:
+Thermal imaging is **not affected by plasma** — it's a passive sensor measuring emitted IR radiation. In the simulation, hypersonic leading edges reach 1650–2760°C from aerodynamic heating:
 
 ```
 T_surface = T_ambient * (1 + 0.85 * 0.2 * Mach^2)
 ```
 
-At Mach 5, surface temperatures exceed 1500K, making thermal detection the primary sensor for hypersonic threats.
+At Mach 5, surface temperatures exceed 1500K, making thermal detection the primary sensor for hypersonic targets in the simulation.
 
-### Quantum Illumination (Stealth Detection)
+### Quantum Illumination (Simplified Educational Model)
 
-Quantum illumination uses entangled microwave photon pairs (Two-Mode Squeezed Vacuum state) to achieve a detection advantage over classical radar. The signal photon is transmitted toward the target while the idler is retained at the receiver; joint measurement exploits quantum correlations.
+This project contains a simplified QI-inspired detection toy model for educational exploration (not a validated real-world model). Quantum illumination uses entangled microwave photon pairs (Two-Mode Squeezed Vacuum state) to achieve a theoretical detection advantage over classical radar. The signal photon is transmitted toward the target while the idler is retained at the receiver; joint measurement exploits quantum correlations.
 
 **TMSV source**: Mean signal photons per mode: `N_S = sinh^2(r)`, where r is the squeeze parameter. QI advantage is maximal when N_S << 1 (r ~ 0.1, N_S ~ 0.01).
 
@@ -342,7 +358,7 @@ Where M = signal-idler mode pairs per pulse, N_B = thermal background photons.
 | Phase Conjugate | 3 dB | Demonstrated in optical domain |
 | Optimal (Helstrom bound) | 6 dB | Theoretical limit |
 
-**Where QI excels**: Low N_S + high N_B = exactly the stealth detection scenario. A stealth target with -20 dBsm at X-band is nearly invisible to classical X-band radar, but QI's 6 dB SNR advantage can push it above the detection threshold.
+**Where QI excels (in theory)**: Low N_S + high N_B = the stealth detection scenario. In the simplified model used here, a target with -20 dBsm at X-band is nearly invisible to classical X-band radar, but QI's theoretical 6 dB SNR advantage can push it above the detection threshold. Note: this is an idealized educational model, not a validated real-world claim.
 
 ### Combined Detection Probability
 
@@ -357,7 +373,7 @@ P_total = 1 - product(1 - P_i)
 | Phase | Description | Tests |
 |-------|-------------|-------|
 | 1 | Project scaffold, camera pipeline, YOLOv8 detection | -- |
-| 2 | Kalman filter tracking, track lifecycle, military HUD | -- |
+| 2 | Kalman filter tracking, track lifecycle, HUD overlay | -- |
 | 3 | Hungarian algorithm for globally optimal data association | -- |
 | 4 | Radar sensor fusion with Extended Kalman Filter | -- |
 | 5 | Multi-frequency radar + thermal imaging for stealth/hypersonic detection | -- |
@@ -374,11 +390,11 @@ P_total = 1 - product(1 - P_i)
 | 16 | Real-world coordinates: WGS84 geodetic, GeoContext, C++ geodetic transforms | -- |
 | 17 | Scale & batching: batch C++ cost matrix, association integration | -- |
 | 18 | Threat classification AI: ML classifier, intent estimator, feature extraction, training pipeline | -- |
-| 19 | IFF identification + Rules of Engagement: interrogation, spoof detection, ROE engine | -- |
-| 20 | Tactical mesh networking: CEC-inspired composite tracking, pub/sub, multi-node fusion | -- |
-| 21 | Multi-target engagement zones: WEZ, Pk/TTI feasibility scoring, Hungarian weapon-target assignment | -- |
+| 19 | IFF modeling + decision-support logic: simulated interrogation, spoof detection, rule engine | -- |
+| 20 | Mesh networking: composite tracking demo, pub/sub, multi-node fusion | -- |
+| 21 | Simulated engagement zones: WEZ, Pk/TTI feasibility scoring, Hungarian weapon-target assignment | -- |
 | 22 | Track history & replay: ring buffer recording, file export/import, playback with speed control | -- |
-| 23 | Data Link / STANAG 5516: Link 16 J-series gateway, bit-level codec, external C2 interoperability | 2181 |
+| 23 | Data-link gateway: simulated J-series message formats, bit-level codec, toy C2 interoperability | 2181 |
 
 ## Dependencies
 
@@ -395,4 +411,5 @@ P_total = 1 - product(1 - P_i)
 
 ## License
 
-MIT
+See [License](License) for terms. This project is publicly available for learning and reference only.
+For usage permissions, contact the author directly.
