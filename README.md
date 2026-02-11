@@ -4,7 +4,7 @@
 
 SENTINEL is an unclassified, educational multi-sensor tracking and fusion framework. It demonstrates real-time track management, multi-target association, sensor fusion, and visualization using simulated sensor models and publicly available algorithms. No classified data, threat libraries, or real-world military interfaces are used.
 
-> **⚠️ Simulation Only** — This project is a learning, research, and portfolio demonstration. It is not intended for real-world deployment, and all sensor models, message formats, and decision logic are simplified educational implementations.
+> **⚠️ Simulation Only** -- This project is a learning, research, and portfolio demonstration. It is not intended for real-world deployment, and all sensor models, message formats, and decision logic are simplified educational implementations.
 
 ## License & Usage
 
@@ -76,14 +76,14 @@ Four independent sensor paths run at their native rates. Tracks are fused by ang
 
 ### Simulated Identification & Decision Logic
 - **IFF modeling**: Simulated interrogation modes (Mode 3/A, C, S, 4/5) with spoof-detection heuristics (code consistency, kinematic plausibility, encryption validation)
-- **Decision-support logic**: Configurable rule engine mapping IFF + threat level to simulated authorization states (weapons_free/weapons_tight/weapons_hold/hold_fire) — simulation-only tasking demo
-- **Engagement zones**: 4 zone types (circular, polygon, annular, sector) with priority-based resolution — for simulation scenarios only
+- **Decision-support logic**: Configurable rule engine mapping IFF + threat level to simulated authorization states (weapons_free/weapons_tight/weapons_hold/hold_fire) -- simulation-only tasking demo
+- **Engagement zones**: 4 zone types (circular, polygon, annular, sector) with priority-based resolution -- for simulation scenarios only
 - **Weapon-target assignment**: Simulated Weapon Engagement Zones (WEZ), Pk/TTI feasibility scoring, Hungarian algorithm optimal assignment across multiple simulated weapon platforms
 
 ### Networking & Data Exchange (Simulated)
-- **Mesh networking**: Composite tracking demo inspired by CEC concepts, with pub/sub messaging, automatic peer discovery, and multi-node track fusion — all in simulation
-- **Data-link gateway**: Simulated J-series message formats (J2.2, J3.2, J3.5, J7.0) with bit-level binary encoding, bidirectional conversion, and field validation — toy protocol, not a real-world interface
-- **Real-world coordinates**: WGS84 geodetic reference with ENU↔geodetic conversion (GeoContext), C++ accelerated
+- **Mesh networking**: Composite tracking demo inspired by CEC concepts, with pub/sub messaging, automatic peer discovery, and multi-node track fusion -- all in simulation
+- **Data-link gateway**: Simulated J-series message formats (J2.2, J3.2, J3.5, J7.0) with bit-level binary encoding, bidirectional conversion, and field validation -- toy protocol, not a real-world interface
+- **Real-world coordinates**: WGS84 geodetic reference with ENU<->geodetic conversion (GeoContext), C++ accelerated
 
 ### Environment & Electronic Warfare (Simulated)
 - **Terrain & environment**: 2D elevation grid with ray-marching line-of-sight, ITU-R P.676/P.838 atmospheric propagation (frequency-dependent), weather effects, surface/rain clutter models
@@ -91,22 +91,22 @@ Four independent sensor paths run at their native rates. Tracks are fused by ang
 
 ### Visualization & Recording
 - **HUD overlay**: Real-time overlay with track boxes, velocity vectors, targeting reticle, radar/thermal/quantum blips, threat badges, and alert banners (military-style dark theme)
-- **Web dashboard**: Real-time browser-based monitoring via FastAPI/WebSocket — tactical PPI radar scope, sortable track table, threat cards, per-stage latency bars, MJPEG HUD video feed, replay controls. Dark theme, vanilla JS (no build step)
-- **Track history & replay**: Ring buffer recording with configurable capture interval, msgpack/JSON export with gzip compression, playback with speed control (0.25x–8x), seek, and web UI
+- **Web dashboard**: Real-time browser-based monitoring via FastAPI/WebSocket -- tactical PPI radar scope, sortable track table, threat cards, per-stage latency bars, MJPEG HUD video feed, replay controls. Dark theme, vanilla JS (no build step)
+- **Track history & replay**: Ring buffer recording with configurable capture interval, msgpack/JSON export with gzip compression, playback with speed control (0.25x-8x), seek, and web UI
 
 ## Portfolio / Technical Highlights
 
 | Aspect | Detail |
 |--------|--------|
-| **Real-time pipeline** | Camera → detection → tracking → fusion → HUD at 30 Hz; radar/thermal/QI paths run at independent native rates |
+| **Real-time pipeline** | Camera -> detection -> tracking -> fusion -> HUD at 30 Hz; radar/thermal/QI paths run at independent native rates |
 | **Algorithms implemented** | KF, EKF, CA-KF, IMM, Hungarian algorithm, JPDA, Mahalanobis gating, NIS consistency monitoring |
 | **Multi-sensor fusion** | 4 independent sensor paths fused by angular correspondence and statistical distance with temporal alignment |
 | **ML integration** | scikit-learn threat classifier, kinematic intent estimator, feature extraction pipeline with training harness |
-| **C++ acceleration** | Optional pybind11 + Eigen for batch cost matrix computation, geodetic transforms — transparent Python fallback |
+| **C++ acceleration** | Optional pybind11 + Eigen for batch cost matrix computation, geodetic transforms -- transparent Python fallback |
 | **Web dashboard** | FastAPI + WebSocket real-time UI with PPI radar scope, sortable track table, latency metrics, MJPEG video feed |
-| **Test coverage** | 2,181 tests — unit (~1,900), integration (~130), scenario validation (~100), plus performance benchmarks |
+| **Test coverage** | 2,181 tests -- unit (~1,900), integration (~130), scenario validation (~100), plus performance benchmarks |
 | **Tech stack** | Python 3.10+, NumPy, SciPy, OpenCV, Ultralytics (YOLOv8), FastAPI, pybind11/Eigen, scikit-learn |
-| **Architecture** | Clean separation of concerns: sensors, detection, tracking, fusion, classification, visualization — all independently configurable |
+| **Architecture** | Clean separation of concerns: sensors, detection, tracking, fusion, classification, visualization -- all independently configurable |
 
 ### Web Dashboard
 
@@ -325,7 +325,7 @@ Where `freq_factor` ranges from 0.3 (VHF) to 2.0 (X-band). VHF penetrates plasma
 
 ### Thermal Signatures (Simulation Model)
 
-Thermal imaging is **not affected by plasma** — it's a passive sensor measuring emitted IR radiation. In the simulation, hypersonic leading edges reach 1650–2760°C from aerodynamic heating:
+Thermal imaging is **not affected by plasma** -- it's a passive sensor measuring emitted IR radiation. In the simulation, hypersonic leading edges reach 1650-2760C from aerodynamic heating:
 
 ```
 T_surface = T_ambient * (1 + 0.85 * 0.2 * Mach^2)
